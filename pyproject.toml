@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jobplan-review-prioritisation-poc"
+version = "0.1.0"
+description = "Local-only, synthetic and explainable JobPlan review prioritisation demonstration"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.1,<3",
+    "pandas>=2.2,<3",
+    "scikit-learn>=1.6,<2",
+    "streamlit>=1.50,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<10"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
