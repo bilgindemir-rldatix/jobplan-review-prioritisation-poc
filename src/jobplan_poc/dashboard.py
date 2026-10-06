@@ -15,7 +15,8 @@ from jobplan_poc.scoring import ReviewModel, Score, fit_model, score_baseline, w
 from jobplan_poc.synthetic import DEFAULT_SEED, REFERENCE_DATE, TEST_START, generate_plans
 
 
-BUILD_LABEL = "clinical-workspace-v4"
+BUILD_LABEL = "clinical-workspace-v5"
+DEFAULT_REVIEW_BUDGET = 30
 
 
 @st.cache_resource
@@ -203,6 +204,18 @@ def select_table_plan(table_key: str, plan_ids: list[str]) -> None:
         st.session_state["selected_plan"] = plan_ids[rows[0]]
 
 
+def reset_review_filters(queue: pd.DataFrame) -> None:
+    for state_key, column in (
+        ("specialties", "specialty"), ("patterns", "working_pattern"), ("stages", "workflow_stage"),
+    ):
+        st.session_state[state_key] = sorted(queue[column].unique())
+    st.session_state["priorities"] = ["High", "Medium", "Low"]
+    st.session_state["search"] = ""
+    st.session_state["ranking"] = "Experimental ML"
+    st.session_state["selected_plan"] = None
+    st.session_state.pop("queue_signature", None)
+
+
 def display_queue_table(records: pd.DataFrame, source: str, table_key: str, *, triage: bool = False) -> None:
     plan_ids = records["plan_id"].tolist()
     fields = (["plan_id", "completeness_percent"] if triage else
@@ -218,8 +231,12 @@ def display_queue_table(records: pd.DataFrame, source: str, table_key: str, *, t
             "plan_id": st.column_config.TextColumn("Plan", width="small"),
             "specialty": st.column_config.TextColumn("Specialty"),
             f"{source}_category": st.column_config.TextColumn("Priority"),
-            "baseline_index": st.column_config.NumberColumn("Rules /100", format="%.1f", width="small"),
-            "model_index": st.column_config.NumberColumn("ML /100", format="%.1f", width="small"),
+            "baseline_index": st.column_config.NumberColumn(
+                "Rules /100", format="%.1f", width="small",
+                help="Transparent weighted rules index: review priority, not a probability."),
+            "model_index": st.column_config.NumberColumn(
+                "ML /100", format="%.1f", width="small",
+                help="Experimental machine-learning index learned from synthetic outcomes; not a validated probability."),
             "completeness_percent": st.column_config.NumberColumn("Complete %", format="%.1f",
                                                                  help="Recorded data completeness, NOT model confidence."),
         },
@@ -252,6 +269,100 @@ def display_patterns(view: pd.DataFrame, source: str, source_label: str) -> None
     st.caption("Departments are fictional display groupings, not real organisations or model predictors.")
 
 
+def display_initiative(split, queue: pd.DataFrame) -> None:
+    st.subheader("Why explore JobPlan review prioritisation?")
+    st.write(
+        "Clinical Directors have finite review time. This initiative explores whether a transparent queue can help "
+        "them choose where to look first, understand why a plan is highlighted and keep the decision with the reviewer."
+    )
+    st.markdown("**For whom, and what value are we testing?**")
+    st.write(
+        "Clinical Directors and authorised JobPlan reviewers are the intended users; Product and service stakeholders "
+        "can use this demo to assess the workflow. The hypothesis is easier prioritisation and more focused review, "
+        "not proven time savings or better clinical outcomes. Simple rules may provide value even if ML adds none."
+    )
+    st.markdown("**A fictional review journey**")
+    st.write(
+        "A Clinical Director has time to review a limited number of plans. They choose a fictional plan from the queue, "
+        "check the previous/current activities and main reason, then decide whether clarification or earlier review "
+        "is appropriate. A working-pattern change may be entirely legitimate. If required inputs are missing, "
+        "they use Data clarification instead of treating the plan as Low. No decision is recorded by this demo."
+    )
+    st.markdown("**How it works**")
+    st.write(
+        "Pre-review plan signals → separate rules and experimental model indices → "
+        "a ranked queue with faithful reasons → authorised human judgement."
+    )
+    st.caption(
+        "Signals include activity changes, workflow age, review due dates and completeness. "
+        "The two indices are never blended; neither measures clinical safety or clinician performance."
+    )
+    st.markdown("**Available now / proposed later**")
+    st.dataframe(pd.DataFrame([
+        {"Available in this demo": "Fictional synthetic plans; local filtering and review detail",
+         "Future proposal, not implemented": "Approved, minimised real pre-review data and controlled access"},
+        {"Available in this demo": "Separate rules/ML indices, actual reasons and missing-data triage",
+         "Future proposal, not implemented": "Clinician-led validation of outcomes, usefulness and subgroup effects"},
+        {"Available in this demo": "Isolated what-if, synthetic benchmark and local exports",
+         "Future proposal, not implemented": "Governed shadow-mode evaluation before considering any live integration"},
+    ]), hide_index=True, width="stretch")
+    st.caption(
+        "No live eJobPlan integration, automatic approval/rejection, persisted review decisions, "
+        "clinical safety assessment or clinician performance assessment."
+    )
+    st.markdown("**What have we learned so far?**")
+    outcomes = split.test.set_index("plan_id")["material_amendment"]
+    comparison = compare_methods(queue, outcomes, DEFAULT_REVIEW_BUDGET)
+    st.dataframe(
+        comparison[["method", "reviewed", "amendments_found", "precision_at_k", "recall_at_k"]],
+        hide_index=True, width="stretch",
+        column_config={
+            "method": "Method", "reviewed": "Plans reviewed", "amendments_found": "Synthetic amendments found",
+            "precision_at_k": st.column_config.NumberColumn("Found / reviewed", format="%.2f"),
+            "recall_at_k": st.column_config.NumberColumn("Found / all amendments", format="%.2f"),
+        },
+    )
+    st.caption(
+        f"Default demo: seed {DEFAULT_SEED}, fixed budget {DEFAULT_REVIEW_BUDGET}; "
+        f"{int(comparison.iloc[0]['cohort'])} eligible holdout plans with "
+        f"{int(comparison.iloc[0]['positives'])} synthetic amendments. "
+        f"{len(queue) - int(comparison.iloc[0]['cohort'])} unscored plans excluded equally from this comparison, "
+        "not from human triage. Independent of the current filters, scenario edits and sidebar budget. "
+        "Ratios are proportions from 0 to 1. Evidence & export lets you explore a different budget."
+    )
+    st.write(
+        "ML has not demonstrated an advantage in this default comparison. The labels teach generator behaviour, "
+        "not validated future review need. Synthetic results are not evidence of real-world benefit; "
+        "Product can still test whether the rules-led workflow is understandable and useful."
+    )
+    st.markdown("**Decision gates before any rollout**")
+    st.write(
+        "1. Agree the intended review decision and an independently reviewed outcome definition; "
+        "a material amendment is not automatically a problem.\n"
+        "2. Approve minimised data, access controls and information governance before using real records.\n"
+        "3. Validate on later time periods with entity separation; examine missingness, errors and subgroup effects.\n"
+        "4. Compare review yield at a fixed budget, and prospectively measure review time and usability with clinicians.\n"
+        "5. Only then consider an approved shadow-mode pilot with human override and monitoring before any rollout."
+    )
+    st.caption(
+        "Shadow mode is proposed, NOT implemented: a future pilot would observe suggestions alongside existing "
+        "review without changing decisions automatically. No target percentages or delivery dates are assumed."
+    )
+    with st.expander("Stakeholder walkthrough & plain-language glossary"):
+        st.write(
+            "Start in Review workspace; choose a scored plan, read the next human action and compare activities. "
+            "Inspect Data clarification, try an isolated what-if, then compare methods in Evidence & export. "
+            "Ask whether the reasons are understandable and whether the workflow helps a reviewer decide where to look."
+        )
+        st.write(
+            "**Priority index:** an ordering aid from 0 to 100, not a clinical probability. "
+            "**Rules:** visible weighted signals. **ML:** an experimental model fitted to synthetic outcomes. "
+            "**Completeness:** recorded data availability, not model confidence. "
+            "**Unscored:** required data must be clarified; not Low. "
+            "**Review yield:** amendments found among a fixed number of reviews, not proof of clinical quality."
+        )
+
+
 def main() -> None:
     st.set_page_config(page_title="JobPlan | Review workspace", layout="wide")
     st.header("JobPlan review workspace")
@@ -264,7 +375,10 @@ def main() -> None:
         st.stop()
 
     st.sidebar.subheader("Review view")
-    ranking = st.sidebar.selectbox("Order and priority source", ["Experimental ML", "Rules baseline", "Oldest-first"], key="ranking")
+    ranking = st.sidebar.selectbox(
+        "Order and priority source", ["Experimental ML", "Rules baseline", "Oldest-first"], key="ranking",
+        help="Rules use visible weights; ML learns synthetic patterns. Both are priority indices, not probabilities. "
+             "Oldest-first orders by workflow age and retains rules-based categories.")
     with st.sidebar.expander("Filter plans"):
         specialties = st.multiselect("Specialty", sorted(queue["specialty"].unique()),
                                      default=sorted(queue["specialty"].unique()), key="specialties")
@@ -274,7 +388,13 @@ def main() -> None:
                                 default=sorted(queue["workflow_stage"].unique()), key="stages")
         priorities = st.multiselect("Review priority", ["High", "Medium", "Low"],
                                     default=["High", "Medium", "Low"], key="priorities")
-    budget = int(st.sidebar.number_input("Review budget K", min_value=1, max_value=500, value=30, step=1))
+    st.sidebar.button(
+        "Reset filters & search", key="reset_filters", on_click=reset_review_filters, args=(queue,),
+        help="Show all plans, clear search, restore ML ordering and select the first plan. "
+             "Keeps your review budget and layout; does not change source data or the model.")
+    budget = int(st.sidebar.number_input(
+        "Review budget K", min_value=1, max_value=500, value=DEFAULT_REVIEW_BUDGET, step=1,
+        help="How many plans to compare at a fixed review capacity. Not an approval limit or policy target."))
     st.sidebar.caption("Evidence uses the full eligible holdout at this budget; filters do not change its benchmark.")
     search = st.text_input("Search plans", placeholder="Fictional ID, specialty, department or review reason",
                            key="search", label_visibility="collapsed",
@@ -289,7 +409,7 @@ def main() -> None:
         f"**{len(needs_triage)}** need data clarification"
     )
     st.caption(f"Of {len(queue)} historical holdout plans | Priority/action source: {source_label} | Ordered by: {ranking}")
-    tabs = st.tabs(["Overview", "Review workspace", "Review patterns", "Evidence & export"],
+    tabs = st.tabs(["Overview", "Review workspace", "Review patterns", "Evidence & export", "About this initiative"],
                    default="Review workspace")
     with tabs[0]:
         st.subheader("A clearer starting point for human review")
@@ -315,6 +435,7 @@ def main() -> None:
     if st.session_state.get("selected_plan") not in detail_ids:
         st.session_state["selected_plan"] = detail_ids[0] if detail_ids else None
     with tabs[1]:
+        st.caption("Choose a plan → understand the review reasons → decide the next human action.")
         stacked = st.sidebar.checkbox("Stack queue and detail (smaller window)", key="stacked")
         panels = [st.container(), st.container()] if stacked else st.columns([1.05, 1], gap="large")
         with panels[0]:
@@ -332,7 +453,8 @@ def main() -> None:
                 "Both indices are /100. Scored plans have valid required inputs; see detail for completeness."
             )
             if ranked.empty:
-                st.info("No scored plans match the current filters and search.")
+                st.info("No scored plans match the current filters and search. Clear the search or use Reset filters & search "
+                        "in the sidebar. Any matching unscored plans are in Data clarification below.")
             else:
                 display_queue_table(ranked, config.source, f"queue-{revision}")
             with st.expander(f"Data clarification - {len(needs_triage)} unscored", expanded=bool(len(needs_triage))):
@@ -347,7 +469,8 @@ def main() -> None:
                 record = split.test.loc[split.test["plan_id"] == selected].iloc[0].to_dict()
                 display_detail(record, model, config.source)
             else:
-                st.info("No plan is selected: no plans match the current filters and search.")
+                st.info("No plan is selected: no plans match the current filters and search. "
+                        "Use Reset filters & search in the sidebar, then choose a plan.")
     with tabs[2]:
         display_patterns(view, config.source, source_label)
     with tabs[3]:
@@ -364,3 +487,5 @@ def main() -> None:
                                file_name="synthetic-review-queue.csv", mime="text/csv", key="export_csv")
             st.download_button("Download filtered queue JSON", export_json(payload),
                                file_name="synthetic-review-queue.json", mime="application/json", key="export_json")
+    with tabs[4]:
+        display_initiative(split, queue)

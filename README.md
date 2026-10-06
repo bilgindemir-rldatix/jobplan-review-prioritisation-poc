@@ -37,7 +37,7 @@ additional UI framework or runtime dependency is introduced.
 
 ### Updating an already running demo
 
-The current interface shows **Build: clinical-workspace-v4** directly below
+The current interface shows **Build: clinical-workspace-v5** directly below
 **JobPlan review workspace**. Check this marker rather than assuming a browser
 refresh loads changed Python modules. If it is absent, stop **your own demo
 server** with Ctrl+C in its original terminal, change to this checkout and run:
@@ -82,8 +82,9 @@ theme and layout APIs: dark text, white surfaces and teal controls. There is no
 injected CSS or JavaScript. Priority remains visible as text, not colour alone.
 The compact overview is a single count line rather than large metric cards.
 
-Four prominent top-level tabs stay visible: **Overview**, **Review workspace**
-(selected initially), **Review patterns** and **Evidence & export**. Supporting
+Five prominent top-level tabs stay visible: **Overview**, **Review workspace**
+(selected initially), **Review patterns**, **Evidence & export** and
+**About this initiative**. Supporting
 details use expanders; the main navigation is never hidden in them.
 
 | Area | Purpose |
@@ -94,6 +95,7 @@ details use expanders; the main navigation is never hidden in them.
 | Selected plan expanders | Previous/current comparison, exact contributions/input context and isolated what-if controls |
 | Review patterns tab | Fictional department/specialty workload counts, denominators and small-group caveats |
 | Evidence & export tab | Full-holdout benchmark and provenance, with downloads in an explicit export expander |
+| About this initiative tab | Product-friendly problem, intended users, value hypothesis, fictional journey, current scope, learning and decision gates |
 
 Select a table row or use **Selected plan**; the **Viewing** indicator always
 marks the plan shown alongside. Changing filters or ordering resets obsolete
@@ -104,6 +106,45 @@ the same panels vertically without changing selection, scores or filters.
 Tables can scroll horizontally where necessary; Streamlit handles narrow
 screens and sidebar collapse. Exact contribution tables and what-if controls
 stay behind deliberate expanders so they do not dominate the initial workflow.
+
+The review orientation is **choose a plan, understand the review reasons, decide
+the next human action**. Hover help explains rules versus experimental ML,
+priority indices versus probabilities, and completeness versus confidence.
+No approval buttons, saved review decisions or live workflow integration are
+implied.
+
+**Reset filters & search** in the sidebar restores all specialty, working-pattern,
+stage and priority options, clears search, restores experimental ML ordering and
+selects the first available plan. Obsolete row selections are invalidated.
+It preserves the review budget and layout; it does not alter source data,
+scenario inputs or model fitting. As before, submitted scenario outputs are
+transient and disappear on a new unrelated interaction. Empty states point to
+this reset action and the separate unscored list instead of leaving a dead end.
+
+### About this initiative: the Product conversation
+
+The fifth tab explains the finite-review-time problem and the hypothesis of
+more understandable, focused prioritisation without claiming time savings or
+clinical benefits. It separates what is implemented (synthetic local review
+support) from proposed future work. A concrete fictional journey shows how a
+Clinical Director might examine a plan and seek clarification while keeping
+judgement with an authorised human.
+
+Its default-demo benchmark is calculated using the existing comparison function,
+the full common holdout and a fixed budget of **30**, independent of search,
+filters, what-if edits and the active sidebar budget. The unchanged default
+result is rules **8**, ML **6**, oldest-first **7** synthetic amendments found.
+ML has not demonstrated advantage here; Product can assess workflow value even
+if transparent rules are preferable. The Evidence tab remains the place to vary
+the review budget. Neither table validates future real-world review need.
+
+Decision gates cover an independently reviewed outcome definition, approved
+minimised data/access/governance, temporal and entity separation, subgroup
+checks, fixed-budget yield and prospective clinician review-time/usability
+measurement. A governed shadow-mode pilot with human override and monitoring
+is **proposed, not implemented**, before any rollout. There are no invented
+targets, promised benefits or timelines. A short walkthrough/glossary is
+available without duplicating the detailed model evidence.
 
 The sidebar filters specialty, working pattern, workflow stage and review
 priority. Free-text search is a case-insensitive **literal phrase** across

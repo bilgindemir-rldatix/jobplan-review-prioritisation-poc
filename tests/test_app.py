@@ -24,11 +24,11 @@ def test_workspace_identity_selection_search_empty_and_secondary_navigation():
     app = start_app()
     assert not app.exception
     assert app.header[0].value == "JobPlan review workspace"
-    assert any("clinical-workspace-v4" in item.value for item in app.caption)
+    assert any("clinical-workspace-v5" in item.value for item in app.caption)
     assert any("Synthetic demo only" in item.value for item in app.caption)
     assert not app.metric
     assert [tab.label for tab in app.tabs] == [
-        "Overview", "Review workspace", "Review patterns", "Evidence & export",
+        "Overview", "Review workspace", "Review patterns", "Evidence & export", "About this initiative",
     ]
     assert len(app.get("column")) == 2
     assert any("**133** plans" in item.value and "**128** scored" in item.value for item in app.markdown)
@@ -78,7 +78,7 @@ def test_what_if_isolation_completeness_and_secondary_downloads():
     downloads_before = [item.proto.url for item in app.get("download_button")]
     assert app.selectbox(key="selected_plan").value == selected_plan
     app.slider[0].set_value(100.0)
-    app.button[0].click().run()
+    next(button for button in app.button if button.label == "Score isolated scenario").click().run()
     assert not app.exception
     assert any("Scenario rules baseline:" in item.value for item in app.markdown)
     for actual, expected in zip(queue_frames(app), before):
@@ -102,7 +102,7 @@ def test_unscored_detail_and_compact_priority_indicators():
     app.selectbox(key="selected_plan").select(plan_id).run()
     assert not app.exception
     assert any("Insufficient required data" in item.value for item in app.warning)
-    assert not app.button
+    assert not any(button.label == "Score isolated scenario" for button in app.button)
     app.text_input(key="search").set_value(plan_id).run()
     assert not app.exception
     assert app.selectbox(key="selected_plan").options == [plan_id]
@@ -140,3 +140,83 @@ def test_light_theme_readable_contrast():
     ]:
         values = sorted([luminance(foreground), luminance(background)])
         assert (values[1] + 0.05) / (values[0] + 0.05) >= 4.5
+
+
+def test_reset_filters_search_and_selection_without_changing_model_or_budget():
+    app = start_app()
+    initial_frames = queue_frames(app)
+    initial_evidence = benchmark(app).copy(deep=True)
+    initial_downloads = [item.proto.url for item in app.get("download_button")]
+    initial_plan = app.selectbox(key="selected_plan").value
+    app.multiselect(key="specialties").set_value(["Radiology"])
+    app.multiselect(key="patterns").set_value(["Full-time"])
+    app.multiselect(key="stages").set_value(["Draft"])
+    app.multiselect(key="priorities").set_value(["High"])
+    app.selectbox(key="ranking").select("Rules baseline")
+    app.text_input(key="search").set_value("no-such-plan").run()
+    assert not app.exception
+    assert not any(item.key == "selected_plan" for item in app.selectbox)
+    assert any("Reset filters & search" in item.value for item in app.info)
+    app.button(key="reset_filters").click().run()
+    assert not app.exception
+    assert app.text_input(key="search").value == ""
+    assert app.selectbox(key="ranking").value == "Experimental ML"
+    for key in ("specialties", "patterns", "stages", "priorities"):
+        widget = app.multiselect(key=key)
+        assert set(widget.value) == set(widget.options)
+    assert app.selectbox(key="selected_plan").value == initial_plan
+    for actual, expected in zip(queue_frames(app), initial_frames):
+        assert actual.equals(expected)
+    assert benchmark(app).equals(initial_evidence)
+    assert [item.proto.url for item in app.get("download_button")] == initial_downloads
+    budget = next(item for item in app.number_input if item.label == "Review budget K")
+    budget.set_value(12)
+    app.checkbox(key="stacked").check()
+    app.text_input(key="search").set_value("no-such-plan").run()
+    app.button(key="reset_filters").click().run()
+    assert not app.exception
+    assert next(item for item in app.number_input if item.label == "Review budget K").value == 12
+    assert app.checkbox(key="stacked").value is True
+
+
+def test_initiative_content_and_fixed_default_benchmark():
+    app = start_app()
+    initiative = app.tabs[4]
+    content = " ".join(item.value for item in [*initiative.markdown, *initiative.caption])
+    for expected in (
+        "finite review time", "value", "not proven time savings", "No live eJobPlan integration",
+        "automatic approval/rejection", "ML has not demonstrated an advantage",
+        "independently reviewed outcome", "information governance", "subgroup",
+        "review time and usability", "Shadow mode is proposed, NOT implemented",
+    ):
+        assert expected in content
+    default = next(item.value for item in initiative.dataframe if "amendments_found" in item.value.columns)
+    assert default.reviewed.tolist() == [30, 30, 30]
+    assert default.amendments_found.tolist() == [8, 6, 7]
+    next(item for item in app.number_input if item.label == "Review budget K").set_value(12)
+    app.text_input(key="search").set_value("no-such-plan").run()
+    assert not app.exception
+    assert benchmark(app).reviewed.tolist() == [12, 12, 12]
+    actual = next(item.value for item in app.tabs[4].dataframe if "amendments_found" in item.value.columns)
+    assert actual.equals(default)
+
+
+def test_reset_callback_only_changes_view_state(monkeypatch):
+    from jobplan_poc import dashboard
+    from jobplan_poc.synthetic import generate_plans
+
+    queue = generate_plans(20)
+    original = queue.copy(deep=True)
+    state = {
+        "selected_plan": "old", "search": "old", "ranking": "Rules baseline",
+        "queue_signature": ("old",), "queue_revision": 4, "budget": 12,
+        "FIC-00001-completeness": 57.0, "stacked": True,
+    }
+    monkeypatch.setattr(dashboard.st, "session_state", state)
+    dashboard.reset_review_filters(queue)
+    assert queue.equals(original)
+    assert state["selected_plan"] is None
+    assert "queue_signature" not in state
+    assert state["queue_revision"] == 4
+    assert state["FIC-00001-completeness"] == 57.0
+    assert state["budget"] == 12 and state["stacked"] is True
