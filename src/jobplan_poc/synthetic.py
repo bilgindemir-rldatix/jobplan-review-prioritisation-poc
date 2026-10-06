@@ -35,6 +35,8 @@ def generate_plans(n: int = 800, seed: int = DEFAULT_SEED, missing_rate: float =
             "plan_id": f"FIC-{index + 1:05d}",
             "entity_id": f"PERSON-{index + 1:05d}",
             "specialty": SPECIALTIES[specialty_index],
+            "department": ("Fictional planned-care group" if specialty_index in (1, 3)
+                           else "Fictional continuing-care group"),
             "working_pattern": "Full-time" if current_wte == 1 else "Less than full-time",
             "workflow_stage": str(rng.choice(STAGES)),
             "snapshot_date": snapshot,

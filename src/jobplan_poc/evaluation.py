@@ -46,6 +46,7 @@ def score_queue(records: pd.DataFrame, model: ReviewModel) -> pd.DataFrame:
         rows.append({
             "plan_id": record["plan_id"],
             "specialty": record["specialty"],
+            "department": record["department"],
             "working_pattern": record["working_pattern"],
             "workflow_stage": record["workflow_stage"],
             "snapshot_date": record["snapshot_date"],
@@ -59,12 +60,22 @@ def score_queue(records: pd.DataFrame, model: ReviewModel) -> pd.DataFrame:
             "model_main_driver": ml.main_driver,
             "baseline_action": baseline.action,
             "model_action": ml.action,
+            "completeness_percent": record.get("completeness_percent"),
+            "input_errors": baseline.errors,
+            "baseline_contributions": baseline.contributions,
+            "model_contributions": ml.contributions,
+            "model_intercept": ml.intercept,
+            "model_decision": ml.decision,
+            "baseline_explanation_space": baseline.explanation_space,
+            "model_explanation_space": ml.explanation_space,
         })
     return pd.DataFrame(rows, columns=[
-        "plan_id", "specialty", "working_pattern", "workflow_stage", "snapshot_date",
+        "plan_id", "specialty", "department", "working_pattern", "workflow_stage", "snapshot_date",
         "baseline_index", "baseline_category", "model_index", "model_category",
         "workflow_age_days", "data_sufficiency",
         "baseline_main_driver", "model_main_driver", "baseline_action", "model_action",
+        "completeness_percent", "input_errors", "baseline_contributions", "model_contributions",
+        "model_intercept", "model_decision", "baseline_explanation_space", "model_explanation_space",
     ])
 
 

@@ -28,7 +28,8 @@ python -m venv .venv
 
 Open `http://127.0.0.1:8501`. Stop the server with Ctrl+C. No activation script
 or credentials are needed. Runtime generation, training and edits stay in memory;
-no dataset or model artefact is written. Re-running with the same seed reproduces
+no dataset or model artefact is automatically written. Explicit downloads save
+the selected export through your browser. Re-running with the same seed reproduces
 the data independently of the wall clock. Exact dependency versions can affect
 last-digit model results; supported dependency ranges are in `pyproject.toml`.
 
@@ -53,29 +54,111 @@ Invoke-WebRequest http://127.0.0.1:8501/_stcore/health -UseBasicParsing
 The health endpoint checks the server, not application correctness; AppTest
 also executes the page, filters, plan details, unscored path and what-if form.
 
-## Dashboard
+## Five-tab dashboard
 
 The dashboard presents the **later synthetic holdout** as a historical
 pre-review queue. Each row has its own snapshot date. Ages and overdue days are
 measured **at that snapshot**, not at today's date. This is not a live waiting list.
 
-- Filter specialty, working pattern, workflow stage and review priority. Rank by
-  baseline, ML or time in the current workflow stage (oldest-first). Both indices,
-  the selected method's priority/action and its largest absolute driver appear
-  alongside explicit input sufficiency. Ties use fictional plan ID.
-- Inspect a plan's previous/current activities, WTE, derived features, both scores
-  and the full contribution breakdown. Under oldest-first, displayed categories
-  and explanations still belong to the baseline, not an invented age model.
-- See missing/invalid required inputs in a **separate unscored data-triage list**,
-  never at the bottom of the scored queue or labelled Low. Priority filters do
-  not hide this list; specialty/pattern/stage filters still apply. A human must
-  resolve or triage these plans independently of the ranked review budget.
-- Use an isolated, explicitly submitted what-if form for current total activity,
-  WTE, completeness, stage age and due-date offset. Total changes preserve the
-  activity mix. Source records, queue, model and benchmark are never changed.
-  Outputs are recalculated through the identical validation/scoring functions.
-  Scenarios are transient, do not repair missing source data and are **not causal
-  estimates or advice to change a plan to obtain a better score**.
+| Tab | Purpose |
+|---|---|
+| Overview | Filtered plan count, eligible scored count, separate unscored data-clarification count and scored priority distribution |
+| Review Queue | Both indices/categories, recorded completeness, faithful main driver/action and separate required-data triage |
+| Plan Detail & What-if | Previous/current comparison, both exact contribution breakdowns and isolated scenario controls |
+| Review Patterns | Fictional department/specialty workload counts, explicit denominators and small-group caveats |
+| Evidence & Export | Unchanged full-holdout benchmark, model provenance/limitations and current filtered original-plan CSV/JSON |
+
+The sidebar filters specialty, working pattern, workflow stage and review
+priority. Free-text search is a case-insensitive **literal phrase** across
+fictional IDs, departments, specialties, both scorers' actual driver labels and
+input-error reasons (not a regex or outcome search). All five tabs use the same
+filtered original-plan view **except the benchmark**, which deliberately remains
+the full common eligible holdout. Counts and selected-plan options follow that
+view. A selection that leaves the view is replaced with its first available
+plan; an empty view clears the detail. Clearing search/filters restores options.
+
+Rank by ML, rules or time in the current workflow stage. The selected score
+source defines the priority filter, overview distribution, actions and group
+rates. With oldest-first, these remain **rules-based**, while ordering uses age.
+Both scores stay separate: no blending, target-score hints, preset category
+clipping or ID-based score jitter. IDs only break exact ranking ties.
+
+Missing/invalid required inputs stay in a **separate unscored data-triage list**,
+never at the bottom of the ranked queue or labelled Low. Priority filters do not
+hide them; specialty/pattern/stage filters and text search still apply. Humans
+must resolve or triage them independently of the ranked review budget. Recorded
+completeness percentage is a **data indicator, NOT model confidence**; a populated
+percentage cannot compensate for a missing required scoring input.
+
+What-if controls change current total activity, WTE, completeness, stage age and
+due-date offset. Total changes preserve activity mix. Source records, queue,
+patterns, fitting, benchmark and exports never change. Scenarios pass through
+the same validation/scoring functions, stay transient and do not repair missing
+source data. They are **not causal estimates or advice to obtain a better score**.
+
+### Review-pattern denominators
+
+Groups contain only plans in the current filtered view. For each department or
+specialty, `total_plans = scored_plans + unscored_plans`, and
+`high_priority_rate_among_scored = high_priority_plans / scored_plans`, using the
+selected scoring source. Rates are proportions from 0 to 1, not percentages.
+A zero scored denominator gives an unavailable rate, not zero. Fewer than five
+scored plans triggers a small-group warning: do not compare these rates.
+There are no groups for an empty view.
+
+Priority filtering changes these denominators: a High-only view naturally
+produces 100% among scored groups. These are descriptive **review-workload
+distributions**, not clinical quality, clinician performance, causal problem
+evidence or reliable comparisons of services. Two deterministic fictional
+department groupings map surgery/radiology to planned care and general
+medicine/psychiatry to continuing care. They are illustrative display groupings,
+not real organisation mappings, and never enter scoring or label generation.
+
+### Export contract (schema 1.0)
+
+Downloads contain the **whole current filtered original-plan view**, not just
+the first K. "Baseline/non-what-if" means unchanged source plans; it does **not**
+mean rules-only scoring. Matching unscored records are included, bypassing the
+priority filter but not other filters/search. No scenarios, outcome labels,
+entity IDs or wall-clock generation timestamps are exported.
+
+JSON contains `metadata` and a `plans` array. CSV uses `record_type` and
+`scope_metadata_json` plus the same plan fields. Its **first data record is
+`record_type=scope`**, carrying the JSON metadata; subsequent records have
+`record_type=plan`. Filter to plan records before tabular analysis. Even an empty
+view has its scope record/header and JSON metadata with an empty plans array.
+This avoids fake plan rows or losing the scope of an empty export.
+
+Metadata contains the filter/search configuration, ordering/priority source,
+scope and unscored policy, counts, synthetic notice, fixed seed/reference/test
+dates, training date range/count, feature order and fitted coefficients,
+intercept, training means/scales. Version identifiers are
+`export_schema_version=1.0`, `scoring_version=rules-v1`,
+`model_version=standardised-logistic-v1`. Coefficients/preprocessing values
+identify the actual fitted model rather than implying all supported library
+versions produce identical last-digit results.
+
+Plan records include fictional `plan_id`, `department`, `specialty`,
+`working_pattern`, `workflow_stage`, `snapshot_date`, `workflow_age_days`,
+`completeness_percent`, `data_sufficiency`, `input_errors`, both
+`baseline_index`/`model_index`, both categories, main drivers, human review
+actions, explanation-space labels, full contribution dictionaries, and
+`model_intercept`/`model_decision`. Rules contributions sum to index points;
+signed ML contributions plus intercept sum to the model log-odds decision,
+**not its transformed index or probability**.
+
+Numbers retain numeric precision in JSON and numeric text in CSV. Unavailable
+scores are JSON `null` and empty CSV cells, never non-standard JSON `NaN`.
+Nested CSV fields are JSON-encoded. Potential spreadsheet-formula text
+(leading `=`, `+`, `-`, `@`, including whitespace prefixes, or a leading tab/
+line break) is apostrophe-prefixed in CSV only; genuine numeric negatives are
+unchanged. JSON preserves original text. Keep spreadsheet import settings
+appropriate for text identifiers.
+
+Exports are byte-deterministic for unchanged data, model and normalised filter
+configuration. They are generated only from the original scored queue and do
+not mutate it. Browser downloads are an explicit local user action; nothing
+is uploaded or sent to another service.
 
 ## Synthetic data and assumptions
 
@@ -248,13 +331,15 @@ synthetic.py -> fictional pre-review records and stochastic outcome labels
 features.py -> explicit validation and five shared pre-review features
 scoring.py  -> rules / training-only linear model / signed terms / isolated scenarios
 evaluation.py -> purged temporal split, scored queues, deterministic ranks, top-K metrics
-dashboard.py -> in-memory Streamlit filters, detail, scenario and benchmark
+presentation.py -> shared filtered scope, workload denominators, deterministic safe exports
+dashboard.py -> five in-memory Streamlit tabs, detail, scenario and benchmark
 app.py -> Streamlit entry point
 tests/ -> reproducibility, bounds, missingness, leakage, contributions, metrics and UI
 ```
 
-There is no database, trained-model file, persisted synthetic dataset or hidden
-API. `.venv`, caches, local secrets and build artefacts are excluded from Git.
+There is no database, trained-model file, automatically persisted synthetic
+dataset or hidden API. Explicit exports are saved only through the browser.
+`.venv`, caches, local secrets and build artefacts are excluded from Git.
 
 ## Before any real-world research
 
