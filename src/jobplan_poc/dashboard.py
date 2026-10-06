@@ -1,5 +1,7 @@
 """In-memory Streamlit demonstration: no uploads, external APIs or persistence."""
 
+from functools import partial
+
 import pandas as pd
 import streamlit as st
 
@@ -13,6 +15,9 @@ from jobplan_poc.scoring import ReviewModel, Score, fit_model, score_baseline, w
 from jobplan_poc.synthetic import DEFAULT_SEED, REFERENCE_DATE, TEST_START, generate_plans
 
 
+BUILD_LABEL = "clinical-workspace-v4"
+
+
 @st.cache_resource
 def load_demo():
     """View schema v2: regenerate cached data after the tabbed-dashboard upgrade."""
@@ -24,9 +29,8 @@ def load_demo():
 
 
 def display_score(title: str, score: Score) -> None:
-    st.subheader(title)
-    st.metric("Prioritisation index", "Unscored" if score.index is None else f"{score.index:.1f} / 100")
-    st.write(f"**Review priority: {score.category}**")
+    value = "Unscored" if score.index is None else f"{score.index:.1f} / 100"
+    st.markdown(f"**{title}: {value} | {score.category}**")
     st.caption(score.sufficiency)
     st.write(score.action)
     if score.index is None:
@@ -48,19 +52,31 @@ def display_score(title: str, score: Score) -> None:
         st.caption("Non-negative baseline index points; these terms sum to the rules index, not an ML explanation.")
 
 
-def display_detail(record: dict, model: ReviewModel) -> None:
-    st.header(f"Plan detail: {record['plan_id']}")
-    st.write(
-        f"**{record['specialty']} | {record['working_pattern']} | {record['workflow_stage']}**"
+def display_detail(record: dict, model: ReviewModel, source: str) -> None:
+    st.subheader(f"Plan {record['plan_id']}")
+    st.caption(f"{record['specialty']} | {record['working_pattern']} | {record['workflow_stage']}")
+    baseline, ml = score_baseline(record), model.score(record)
+    selected_score = ml if source == "model" else baseline
+    for label, score in [("Rules index", baseline), ("Experimental ML index", ml)]:
+        value = "Unscored" if score.index is None else f"{score.index:.1f} / 100"
+        st.markdown(f"**{label}** &nbsp; {value} &nbsp; | &nbsp; {score.category}")
+    st.caption("Separate review-priority indices, not a clinical probability. Low does not mean no review needed.")
+    st.markdown("**Next human action**")
+    st.write(selected_score.action)
+    if selected_score.errors:
+        st.warning("Insufficient required data - unscored, not Low.")
+        for error in selected_score.errors:
+            st.text(error)
+    else:
+        st.markdown("**Main review driver**")
+        st.write(selected_score.main_driver)
+    st.caption(
+        f"Recorded completeness: {record['completeness_percent']:.1f}% | {selected_score.sufficiency}. "
+        "Data completeness is NOT model confidence."
     )
     st.caption(
-        f"Pre-review snapshot: {record['snapshot_date']:%Y-%m-%d}; "
-        f"illustrative due date: {record['review_due_date']:%Y-%m-%d}. "
-        "Each fictional entity appears once; the previous-plan values are contextual inputs, not a second training row."
+        f"Snapshot {record['snapshot_date']:%d %b %Y} | Illustrative review due {record['review_due_date']:%d %b %Y}"
     )
-    st.write(f"**Fictional department:** {record['department']}")
-    st.metric("Recorded data completeness (%)", f"{record['completeness_percent']:.1f}")
-    st.caption("Data-completeness indicator, NOT model confidence. All required scoring inputs must also be valid.")
     comparison = pd.DataFrame([
         {"Measure": label, "Previous": record[f"previous_{field}"], "Current": record[f"current_{field}"]}
         for field, label in [
@@ -72,32 +88,26 @@ def display_detail(record: dict, model: ReviewModel) -> None:
         ]
     ])
     comparison["Change"] = comparison["Current"] - comparison["Previous"]
-    st.subheader("Previous / current activity comparison")
-    st.dataframe(comparison, hide_index=True, width="stretch")
-    st.caption(
-        "PA and activity groupings are illustrative. A different specialty, working pattern or legitimate plan change "
-        "is not evidence of poor performance, misconduct or clinical safety concerns."
-    )
+    with st.expander("Previous / current plan", expanded=True):
+        st.dataframe(comparison, hide_index=True, width="stretch",
+                     column_config={name: st.column_config.NumberColumn(format="%.2f")
+                                    for name in ("Previous", "Current", "Change")})
+        st.caption("WTE = whole-time equivalent; PA = programmed activities. Legitimate variation is not poor performance.")
     features = extract_features(record)
-    if features.values is None:
-        st.error("Insufficient required data: this plan has no index. It must not be treated as low priority.")
-        for error in features.errors:
-            st.write(f"- {error}")
-    else:
-        st.dataframe(
-            pd.DataFrame([{"Derived pre-review feature": FEATURE_LABELS[key], "Value": value}
-                          for key, value in features.values.items()]),
-            hide_index=True, width="stretch",
+    with st.expander("Score breakdown & input context"):
+        st.caption(f"Department: {record['department']}. Each entity has one pre-review row; previous values are context.")
+        if features.values is not None:
+            st.dataframe(
+                pd.DataFrame([{"Derived pre-review feature": FEATURE_LABELS[key], "Value": value}
+                              for key, value in features.values.items()]),
+                hide_index=True, width="stretch",
+            )
+        display_score("Rules baseline", baseline)
+        display_score("Experimental learned model", ml)
+        st.caption(
+            "Illustrative boundaries: Low < 35; Medium 35 to < 65; High 65 to 100, using unrounded values. "
+            "These are not policy thresholds. Model terms are signed log-odds contributions, not index points."
         )
-    baseline_column, model_column = st.columns(2)
-    with baseline_column:
-        display_score("Rules baseline", score_baseline(record))
-    with model_column:
-        display_score("Experimental learned model", model.score(record))
-    st.caption(
-        "Illustrative boundaries for both indices: Low < 35; Medium 35 to < 65; High 65 to 100. "
-        "Categories use unrounded scores. These indices are different constructions, not interchangeable measurements."
-    )
     with st.expander("Isolated what-if scenario", expanded=False):
         st.warning(
             "Exploration only: these edits stay in memory and do not change the source plan, review queue, model "
@@ -142,11 +152,8 @@ def display_detail(record: dict, model: ReviewModel) -> None:
             _, scenario_baseline, scenario_model = what_if(record, updates, model)
             if scenario_baseline.errors:
                 st.error("Scenario is unscored: " + " ".join(scenario_baseline.errors))
-            left, right = st.columns(2)
-            with left:
-                display_score("Scenario rules baseline", scenario_baseline)
-            with right:
-                display_score("Scenario learned model", scenario_model)
+            display_score("Scenario rules baseline", scenario_baseline)
+            display_score("Scenario learned model", scenario_model)
 
 
 def display_evidence(split, model, queue, budget: int) -> None:
@@ -190,142 +197,170 @@ def display_evidence(split, model, queue, budget: int) -> None:
         st.caption("See README.md for complete rules, synthetic target definition, limitations and reproducible results.")
 
 
-def main() -> None:
-    st.set_page_config(page_title="JobPlan Review Prioritisation POC", layout="wide")
-    st.title("JobPlan Review Prioritisation")
-    st.warning(
-        "SYNTHETIC DEMONSTRATION ONLY. Supports Clinical Director review prioritisation, not clinical judgement. "
-        "Does not rate clinician performance or predict clinical safety. No real clinician data or NHS policy thresholds."
+def select_table_plan(table_key: str, plan_ids: list[str]) -> None:
+    rows = st.session_state[table_key]["selection"]["rows"]
+    if rows and 0 <= rows[0] < len(plan_ids):
+        st.session_state["selected_plan"] = plan_ids[rows[0]]
+
+
+def display_queue_table(records: pd.DataFrame, source: str, table_key: str, *, triage: bool = False) -> None:
+    plan_ids = records["plan_id"].tolist()
+    fields = (["plan_id", "completeness_percent"] if triage else
+              ["plan_id", f"{source}_category", "baseline_index", "model_index"])
+    display = records[fields].copy()
+    display.insert(0, "Viewing", display["plan_id"] == st.session_state.get("selected_plan"))
+    st.dataframe(
+        display, hide_index=True, width="stretch", height=180 if triage else 390,
+        row_height=32, key=table_key, on_select=partial(select_table_plan, table_key, plan_ids),
+        selection_mode="single-row",
+        column_config={
+            "Viewing": st.column_config.CheckboxColumn("Viewing", width="small"),
+            "plan_id": st.column_config.TextColumn("Plan", width="small"),
+            "specialty": st.column_config.TextColumn("Specialty"),
+            f"{source}_category": st.column_config.TextColumn("Priority"),
+            "baseline_index": st.column_config.NumberColumn("Rules /100", format="%.1f", width="small"),
+            "model_index": st.column_config.NumberColumn("ML /100", format="%.1f", width="small"),
+            "completeness_percent": st.column_config.NumberColumn("Complete %", format="%.1f",
+                                                                 help="Recorded data completeness, NOT model confidence."),
+        },
     )
+
+
+def display_patterns(view: pd.DataFrame, source: str, source_label: str) -> None:
+    st.subheader("Review-workload distribution")
+    st.caption("Descriptive workload, not clinical quality, clinician performance or evidence of causal problems.")
     st.caption(
-        "All identifiers and records are fictional. No confirmed ejobplan fields or contracts are used. "
-        "No uploads, integrations, LLM explanations or saved edits."
+        f"Filtered original plans | Source: {source_label}. High-priority rate = high / scored plans in each group. "
+        "Total = scored + unscored; zero scored denominator means unavailable. "
+        "Do not compare rates for groups with fewer than 5 scored plans. "
+        "Filters affect denominators: a High-only view will show 100% for scored groups."
     )
+    if view.empty:
+        st.info("No workload groups to display for the current filters and search.")
+    else:
+        for group in ("department", "specialty"):
+            st.markdown(f"**By fictional {group}**")
+            st.dataframe(workload_groups(view, group, source), hide_index=True, width="stretch",
+                         column_config={
+                             group: st.column_config.TextColumn(group.capitalize()),
+                             "total_plans": "All plans", "scored_plans": "Scored", "unscored_plans": "Unscored",
+                             "high_priority_plans": "High priority",
+                             "high_priority_rate_among_scored": st.column_config.NumberColumn(
+                                 "High / scored", format="%.2f", help="Proportion, 0 to 1; not percentage"),
+                             "interpretation": "Interpretation",
+                         })
+    st.caption("Departments are fictional display groupings, not real organisations or model predictors.")
+
+
+def main() -> None:
+    st.set_page_config(page_title="JobPlan | Review workspace", layout="wide")
+    st.header("JobPlan review workspace")
+    st.caption(f"Clinical Director review support | Build: {BUILD_LABEL}")
+    st.caption("Synthetic demo only. Supports human review, not clinician performance assessment or clinical safety prediction.")
     try:
         split, model, queue = load_demo()
     except ValueError as exc:
         st.error(f"Demo cannot be scored: {exc}")
         st.stop()
-    st.sidebar.header("Shared review view")
-    ranking = st.sidebar.selectbox("Rank by", ["Experimental ML", "Rules baseline", "Oldest-first"])
-    specialties = st.sidebar.multiselect("Specialty", sorted(queue["specialty"].unique()),
-                                         default=sorted(queue["specialty"].unique()))
-    patterns = st.sidebar.multiselect("Working pattern", sorted(queue["working_pattern"].unique()),
-                                      default=sorted(queue["working_pattern"].unique()))
-    stages = st.sidebar.multiselect("Workflow stage", sorted(queue["workflow_stage"].unique()),
-                                    default=sorted(queue["workflow_stage"].unique()))
-    priorities = st.sidebar.multiselect("Review priority", ["High", "Medium", "Low"], default=["High", "Medium", "Low"])
-    search = st.sidebar.text_input("Search fictional ID, department, specialty or review reasons")
-    st.sidebar.caption("Case-insensitive literal phrase search across both scorers' actual drivers and input-error reasons.")
-    budget = int(st.sidebar.number_input("Fixed review budget K", min_value=1, max_value=500, value=30, step=1))
+
+    st.sidebar.subheader("Review view")
+    ranking = st.sidebar.selectbox("Order and priority source", ["Experimental ML", "Rules baseline", "Oldest-first"], key="ranking")
+    with st.sidebar.expander("Filter plans"):
+        specialties = st.multiselect("Specialty", sorted(queue["specialty"].unique()),
+                                     default=sorted(queue["specialty"].unique()), key="specialties")
+        patterns = st.multiselect("Working pattern", sorted(queue["working_pattern"].unique()),
+                                  default=sorted(queue["working_pattern"].unique()), key="patterns")
+        stages = st.multiselect("Workflow stage", sorted(queue["workflow_stage"].unique()),
+                                default=sorted(queue["workflow_stage"].unique()), key="stages")
+        priorities = st.multiselect("Review priority", ["High", "Medium", "Low"],
+                                    default=["High", "Medium", "Low"], key="priorities")
+    budget = int(st.sidebar.number_input("Review budget K", min_value=1, max_value=500, value=30, step=1))
+    st.sidebar.caption("Evidence uses the full eligible holdout at this budget; filters do not change its benchmark.")
+    search = st.text_input("Search plans", placeholder="Fictional ID, specialty, department or review reason",
+                           key="search", label_visibility="collapsed",
+                           help="Case-insensitive literal phrase search across both scorers and input errors.")
     config = ViewConfig(ranking, tuple(specialties), tuple(patterns), tuple(stages), tuple(priorities), search)
     view = filtered_queue(queue, config)
     ranked = view[view["baseline_index"].notna()]
     needs_triage = view[view["baseline_index"].isna()]
     source_label = "Experimental ML" if config.source == "model" else "Rules baseline"
-    st.caption(
-        f"View scope: {len(view)} of {len(queue)} later synthetic holdout plans match the sidebar filters/search. "
-        f"Priority categories, distribution and actions use {source_label}; ordering uses {ranking}. "
-        "Rules and ML indices remain separate. Unscored plans bypass the priority filter but not the other filters/search. "
-        "The evidence benchmark always uses the full eligible holdout, not this filtered view."
+    st.markdown(
+        f"**{len(view)}** plans in view &nbsp; | &nbsp; **{len(ranked)}** scored &nbsp; | &nbsp; "
+        f"**{len(needs_triage)}** need data clarification"
     )
-    tabs = st.tabs(["Overview", "Review Queue", "Plan Detail & What-if", "Review Patterns", "Evidence & Export"])
+    st.caption(f"Of {len(queue)} historical holdout plans | Priority/action source: {source_label} | Ordered by: {ranking}")
+    tabs = st.tabs(["Overview", "Review workspace", "Review patterns", "Evidence & export"],
+                   default="Review workspace")
     with tabs[0]:
-        st.header("Review workload overview")
-        st.info(
-            "Historical pre-review simulation, not a live waiting list. Ages and overdue days are calculated at each "
-            "row's snapshot, never today's clock. An amendment or a high review priority is not a finding of poor performance."
-        )
-        columns = st.columns(3)
-        columns[0].metric("Plans in filtered view", len(view))
-        columns[1].metric("Eligible scored plans", len(ranked))
-        columns[2].metric("Unscored - data clarification", len(needs_triage))
-        if view.empty:
-            st.info("No plans match the current filters and search.")
-        st.subheader(f"Priority distribution - {source_label}")
-        st.dataframe(priority_distribution(view, config.source), hide_index=True, width="stretch")
-        st.caption(
-            "Counts cover scored plans in this filtered view, not all holdout plans. Unscored plans are separate, "
-            "never Low. Completeness is a recorded data indicator, NOT model confidence or clinical assurance."
-        )
+        st.subheader("A clearer starting point for human review")
         st.write(
-            "Start with the queue and separate data-clarification list; inspect a plan's context and exact explanations "
-            "before deciding on review. What-if edits are isolated experiments, not recommendations."
+            "Open **Review workspace** to choose a plan and see its context alongside the queue. "
+            "Review the suggested action and main driver, then make your own judgement. "
+            "Check **Data clarification** separately: an unscored plan is not a low-priority plan."
         )
+        st.markdown(f"**Priority distribution - {source_label}**")
+        st.dataframe(priority_distribution(view, config.source), hide_index=True, width="stretch",
+                     column_config={"review_priority": "Review priority", "scored_plans": "Scored plans"})
+        st.caption(
+            "Review patterns describes workload by fictional group. Evidence & export contains the synthetic "
+            "benchmark and downloads. What-if is inside the selected plan and never changes the original queue."
+        )
+        st.caption(
+            "All counts and patterns use this filtered original-plan view. Unscored records bypass only the priority "
+            "filter, never become Low, and need separate human triage. Ages refer to each snapshot, not today's clock. "
+            "Oldest-first orders by stage age but uses rules categories/actions. Exact score ties use fictional ID. "
+            "The benchmark alone uses the full eligible holdout; exports include all matching plans, not just K."
+        )
+    detail_ids = view["plan_id"].tolist()
+    if st.session_state.get("selected_plan") not in detail_ids:
+        st.session_state["selected_plan"] = detail_ids[0] if detail_ids else None
     with tabs[1]:
-        st.header("Review queue")
-        st.caption(
-            "Ranks apply only to scored plans. Identical scores are tied by fictional plan ID. "
-            "The first K rows are highlighted by within_view_budget; exports include the whole filtered view."
-        )
-        if ranking == "Oldest-first":
-            st.caption("Oldest-first means time in current workflow stage; categories and drivers remain rules-based.")
-        if ranked.empty:
-            st.info("No scored plans match the current filters and search.")
-        else:
-            display = ranked[[
-                "plan_id", "department", "specialty", "working_pattern", "workflow_stage", "snapshot_date",
-                "baseline_index", "baseline_category", "model_index", "model_category", "workflow_age_days",
-                "completeness_percent", "data_sufficiency", f"{config.source}_main_driver",
-                f"{config.source}_action",
-            ]].copy()
-            display.insert(0, "rank", range(1, len(display) + 1))
-            display.insert(1, "within_view_budget", display["rank"] <= budget)
-            st.dataframe(display, hide_index=True, width="stretch")
-        st.subheader("Needs data triage - unscored")
-        if needs_triage.empty:
-            st.caption("No insufficient-data records match the non-priority filters and search.")
-        else:
-            st.dataframe(needs_triage[[
-                "plan_id", "department", "specialty", "completeness_percent", "data_sufficiency",
-                "input_errors", "baseline_action",
-            ]], hide_index=True, width="stretch")
+        stacked = st.sidebar.checkbox("Stack queue and detail (smaller window)", key="stacked")
+        panels = [st.container(), st.container()] if stacked else st.columns([1.05, 1], gap="large")
+        with panels[0]:
+            st.subheader("Review queue")
+            if detail_ids:
+                st.selectbox("Selected plan", detail_ids, key="selected_plan",
+                             help="Choose here or select a table row. Viewing marks the plan shown alongside.")
+            signature = (tuple(detail_ids), st.session_state["selected_plan"], config.source)
+            if st.session_state.get("queue_signature") != signature:
+                st.session_state["queue_revision"] = st.session_state.get("queue_revision", 0) + 1
+                st.session_state["queue_signature"] = signature
+            revision = st.session_state["queue_revision"]
+            st.caption(
+                f"Select a row to inspect. First {min(budget, len(ranked))} scored plans are within this view's budget. "
+                "Both indices are /100. Scored plans have valid required inputs; see detail for completeness."
+            )
+            if ranked.empty:
+                st.info("No scored plans match the current filters and search.")
+            else:
+                display_queue_table(ranked, config.source, f"queue-{revision}")
+            with st.expander(f"Data clarification - {len(needs_triage)} unscored", expanded=bool(len(needs_triage))):
+                st.caption("No score means insufficient required inputs, not low review priority. Select a plan for the exact issue.")
+                if needs_triage.empty:
+                    st.caption("No unscored records match this view.")
+                else:
+                    display_queue_table(needs_triage, config.source, f"triage-{revision}", triage=True)
+        with panels[1]:
+            if detail_ids:
+                selected = st.session_state["selected_plan"]
+                record = split.test.loc[split.test["plan_id"] == selected].iloc[0].to_dict()
+                display_detail(record, model, config.source)
+            else:
+                st.info("No plan is selected: no plans match the current filters and search.")
     with tabs[2]:
-        detail_ids = view["plan_id"].tolist()
-        if st.session_state.get("selected_plan") not in detail_ids:
-            st.session_state["selected_plan"] = detail_ids[0] if detail_ids else None
-        if detail_ids:
-            selected = st.selectbox("Choose a plan for detail", detail_ids, key="selected_plan")
-            record = split.test.loc[split.test["plan_id"] == selected].iloc[0].to_dict()
-            display_detail(record, model)
-        else:
-            st.info("No plan is selected: no plans match the current filters and search.")
+        display_patterns(view, config.source, source_label)
     with tabs[3]:
-        st.header("Review-workload distribution")
-        st.warning(
-            "Descriptive review workload, NOT clinical quality, clinician performance or evidence of causal problems. "
-            "Small groups and changes to filters can make comparisons misleading."
-        )
-        st.caption(
-            f"Same filtered original-plan view; source: {source_label}. "
-            "High-priority rate = high-priority scored plans / scored plans within each group, "
-            "NOT / all plans. Total = scored + unscored. Zero scored denominator gives an unavailable rate. "
-            "Groups with fewer than 5 scored plans are flagged; do not compare their rates. "
-            "Priority filtering also changes denominators: a High-only view will show 100% for scored groups."
-        )
-        if view.empty:
-            st.info("No workload groups to display for the current filters and search.")
-        else:
-            for group in ("department", "specialty"):
-                st.subheader(f"By fictional {group}")
-                st.dataframe(workload_groups(view, group, config.source), hide_index=True, width="stretch")
-        st.caption(
-            "Departments are two deterministic fictional groupings of specialties, not real organisational mappings. "
-            "They are not predictors and do not affect scores or outcomes."
-        )
-    with tabs[4]:
         display_evidence(split, model, queue, budget)
-        st.subheader("Export current original-plan view")
-        st.caption(
-            f"Exports contain {len(ranked)} scored and {len(needs_triage)} unscored original plans matching this view. "
-            "BASELINE here means the unchanged source records, not rules-only scoring: both scores, categories, "
-            "exact contributions, actions and data sufficiency are included. No scenario edits or outcome labels. "
-            "Not limited to the review budget. JSON uses null for unavailable values. "
-            "CSV begins with a scope metadata record, followed by plan records; select record_type=plan for analysis. "
-            "Text that could be interpreted as a spreadsheet formula is apostrophe-prefixed in CSV only."
-        )
-        payload = export_payload(queue, config, model)
-        st.download_button("Download filtered queue CSV", export_csv(payload, list(queue.columns)),
-                           file_name="synthetic-review-queue.csv", mime="text/csv", key="export_csv")
-        st.download_button("Download filtered queue JSON", export_json(payload),
-                           file_name="synthetic-review-queue.json", mime="application/json", key="export_json")
+        with st.expander("Export current original-plan view"):
+            st.caption(
+                f"{len(ranked)} scored and {len(needs_triage)} unscored original plans; both scores/categories, exact "
+                "contributions, actions and input sufficiency included. No what-if edits or outcome labels; not limited to K. "
+                "Unavailable JSON values are null. CSV has one scope record then plan records (record_type=plan); "
+                "potential spreadsheet-formula text is apostrophe-prefixed. Exports stay local to your browser."
+            )
+            payload = export_payload(queue, config, model)
+            st.download_button("Download filtered queue CSV", export_csv(payload, list(queue.columns)),
+                               file_name="synthetic-review-queue.csv", mime="text/csv", key="export_csv")
+            st.download_button("Download filtered queue JSON", export_json(payload),
+                               file_name="synthetic-review-queue.json", mime="application/json", key="export_json")

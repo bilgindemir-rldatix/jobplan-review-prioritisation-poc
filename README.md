@@ -32,6 +32,23 @@ no dataset or model artefact is automatically written. Explicit downloads save
 the selected export through your browser. Re-running with the same seed reproduces
 the data independently of the wall clock. Exact dependency versions can affect
 last-digit model results; supported dependency ranges are in `pyproject.toml`.
+The workspace uses the tested Streamlit 1.65+ native tab/selection APIs; no
+additional UI framework or runtime dependency is introduced.
+
+### Updating an already running demo
+
+The current interface shows **Build: clinical-workspace-v4** directly below
+**JobPlan review workspace**. Check this marker rather than assuming a browser
+refresh loads changed Python modules. If it is absent, stop **your own demo
+server** with Ctrl+C in its original terminal, change to this checkout and run:
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+Then refresh `http://127.0.0.1:8501`. Restarting also applies the light theme.
+Do not stop another person's process or a server whose identity is uncertain.
+A successful health check alone does not identify which app version is loaded.
 
 Run all tests, including the Streamlit AppTest smoke tests:
 
@@ -54,24 +71,44 @@ Invoke-WebRequest http://127.0.0.1:8501/_stcore/health -UseBasicParsing
 The health endpoint checks the server, not application correctness; AppTest
 also executes the page, filters, plan details, unscored path and what-if form.
 
-## Five-tab dashboard
+## Clinical review workspace
 
 The dashboard presents the **later synthetic holdout** as a historical
 pre-review queue. Each row has its own snapshot date. Ages and overdue days are
 measured **at that snapshot**, not at today's date. This is not a live waiting list.
 
-| Tab | Purpose |
+The default is a restrained **light workspace**, using Streamlit's supported
+theme and layout APIs: dark text, white surfaces and teal controls. There is no
+injected CSS or JavaScript. Priority remains visible as text, not colour alone.
+The compact overview is a single count line rather than large metric cards.
+
+Four prominent top-level tabs stay visible: **Overview**, **Review workspace**
+(selected initially), **Review patterns** and **Evidence & export**. Supporting
+details use expanders; the main navigation is never hidden in them.
+
+| Area | Purpose |
 |---|---|
-| Overview | Filtered plan count, eligible scored count, separate unscored data-clarification count and scored priority distribution |
-| Review Queue | Both indices/categories, recorded completeness, faithful main driver/action and separate required-data triage |
-| Plan Detail & What-if | Previous/current comparison, both exact contribution breakdowns and isolated scenario controls |
-| Review Patterns | Fictional department/specialty workload counts, explicit denominators and small-group caveats |
-| Evidence & Export | Unchanged full-holdout benchmark, model provenance/limitations and current filtered original-plan CSV/JSON |
+| Overview tab | Plain-language starting guidance, scored priority distribution and population definitions |
+| Review workspace (default) | Compact queue beside the selected plan, both indices, main driver, next human action and data sufficiency |
+| Data clarification | Separate selectable unscored list under the queue, with recorded completeness |
+| Selected plan expanders | Previous/current comparison, exact contributions/input context and isolated what-if controls |
+| Review patterns tab | Fictional department/specialty workload counts, denominators and small-group caveats |
+| Evidence & export tab | Full-holdout benchmark and provenance, with downloads in an explicit export expander |
+
+Select a table row or use **Selected plan**; the **Viewing** indicator always
+marks the plan shown alongside. Changing filters or ordering resets obsolete
+table selections, preventing a stale row from selecting the wrong plan. The
+selected plan persists when moving between tabs if still in
+scope. The sidebar's **Stack queue and detail (smaller window)** switch places
+the same panels vertically without changing selection, scores or filters.
+Tables can scroll horizontally where necessary; Streamlit handles narrow
+screens and sidebar collapse. Exact contribution tables and what-if controls
+stay behind deliberate expanders so they do not dominate the initial workflow.
 
 The sidebar filters specialty, working pattern, workflow stage and review
 priority. Free-text search is a case-insensitive **literal phrase** across
 fictional IDs, departments, specialties, both scorers' actual driver labels and
-input-error reasons (not a regex or outcome search). All five tabs use the same
+input-error reasons (not a regex or outcome search). All workspace areas use the same
 filtered original-plan view **except the benchmark**, which deliberately remains
 the full common eligible holdout. Counts and selected-plan options follow that
 view. A selection that leaves the view is replaced with its first available
@@ -332,7 +369,7 @@ features.py -> explicit validation and five shared pre-review features
 scoring.py  -> rules / training-only linear model / signed terms / isolated scenarios
 evaluation.py -> purged temporal split, scored queues, deterministic ranks, top-K metrics
 presentation.py -> shared filtered scope, workload denominators, deterministic safe exports
-dashboard.py -> five in-memory Streamlit tabs, detail, scenario and benchmark
+dashboard.py -> light review workspace, adjacent detail, secondary patterns/evidence/export
 app.py -> Streamlit entry point
 tests/ -> reproducibility, bounds, missingness, leakage, contributions, metrics and UI
 ```

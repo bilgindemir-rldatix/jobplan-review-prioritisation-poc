@@ -4,3 +4,11 @@ gatherUsageStats = false
 [server]
 address = "127.0.0.1"
 headless = true
+
+[theme]
+base = "light"
+primaryColor = "#176B68"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F6F7"
+textColor = "#18323A"
+font = "sans serif"
