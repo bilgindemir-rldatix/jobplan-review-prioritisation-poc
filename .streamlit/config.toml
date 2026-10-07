@@ -7,8 +7,36 @@ headless = true
 
 [theme]
 base = "light"
-primaryColor = "#176B68"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F3F6F7"
-textColor = "#18323A"
+primaryColor = "#1B7F5A"
+backgroundColor = "#F6F8F7"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#14292B"
 font = "sans serif"
+baseFontSize = 14
+headingFontSizes = ["24px", "18px", "18px", "16px", "14px", "14px"]
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+baseRadius = "8px"
+buttonRadius = "8px"
+borderColor = "#6F8582"
+dataframeBorderColor = "#D3DEDB"
+showWidgetBorder = true
+orangeColor = "#8A5300"
+orangeBackgroundColor = "#FFF4DB"
+orangeTextColor = "#6B4700"
+yellowColor = "#8A5300"
+yellowBackgroundColor = "#FFF4DB"
+yellowTextColor = "#6B4700"
+blueColor = "#1D4E89"
+blueBackgroundColor = "#E8F0F8"
+blueTextColor = "#1D4E89"
+redColor = "#A4262C"
+redBackgroundColor = "#FDECEA"
+redTextColor = "#A4262C"
+grayTextColor = "#44595B"
+grayBackgroundColor = "#FFFFFF"
+
+[theme.sidebar]
+backgroundColor = "#0B3B3C"
+secondaryBackgroundColor = "#0B3B3C"
+textColor = "#FFFFFF"
+primaryColor = "#FFFFFF"
