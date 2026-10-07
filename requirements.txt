@@ -1,0 +1,5 @@
+# Mirrors pyproject.toml dependencies for hosts that read requirements.txt (e.g. Streamlit Community Cloud).
+numpy>=2.1,<3
+pandas>=2.2,<3
+scikit-learn>=1.6,<2
+streamlit>=1.65,<2

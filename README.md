@@ -91,6 +91,22 @@ Invoke-WebRequest http://127.0.0.1:8517/_stcore/health -UseBasicParsing
 The health endpoint checks the server, not application correctness; AppTest
 also executes the page, filters, plan details, unscored path and what-if form.
 
+### Hosting on Streamlit Community Cloud (optional)
+
+`requirements.txt` mirrors the `pyproject.toml` dependencies (a test keeps them
+in step) and `app.py` locates `src/` itself, so the repository deploys without a
+package install. Verified from a clean virtual environment using only
+`requirements.txt`.
+
+1. Sign in at <https://share.streamlit.io> with GitHub and authorise access to the repository.
+2. Create app: repository `bilgindemir-rldatix/jobplan-review-prioritisation-poc`, branch `main`, main file `app.py`.
+3. Advanced settings: Python 3.12 or 3.13. No secrets are needed.
+4. Set sharing to **private** (invited viewers only) before sharing the URL.
+
+The app has no login of its own, and the hosting is outside company
+infrastructure; obtain security or product approval first. The data is
+synthetic, but the documents describe product architecture at a high level.
+
 ## Clinical review workspace
 
 The dashboard presents the **later synthetic holdout** as a historical
