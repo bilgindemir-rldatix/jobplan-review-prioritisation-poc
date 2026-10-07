@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def start_app():
     testing = pytest.importorskip("streamlit.testing.v1")
-    return testing.AppTest.from_file(str(ROOT / "app.py"), default_timeout=60).run()
+    app = testing.AppTest.from_file(str(ROOT / "app.py"), default_timeout=60).run()
+    app.radio(key="navigation").set_value("Review queue").run()
+    return app
 
 
 def navigate(app, page):
@@ -48,10 +50,10 @@ def test_navigation_three_plans_and_no_primary_technical_controls():
     assert not app.exception
     assert app.title[0].value == "Plans to review"
     assert app.sidebar.title[0].value == "JobPlan review"
-    assert app.radio(key="navigation").options == ["Review queue", "Experiment results", "About the POC"]
+    assert app.radio(key="navigation").options == ["Product integration", "Review queue", "Experiment results", "About the POC"]
     assert app.radio(key="navigation").value == "Review queue"
     assert not app.tabs and not app.metric
-    assert "clinical-workspace-v8" in content(app)
+    assert "clinical-workspace-v9" in content(app)
     assert not any("Build:" in item.value for item in app.title)
     assert not app.number_input and not app.selectbox and not app.text_input
     assert not app.dataframe and not app.expander

@@ -21,12 +21,13 @@ from jobplan_poc.review_display import (
 from jobplan_poc.scoring import ReviewModel, Score, fit_model, what_if
 from jobplan_poc.synthetic import DEFAULT_SEED, REFERENCE_DATE, TEST_START
 from jobplan_poc.theme import apply_theme
+from jobplan_poc.integration import display_integration
 
 
-BUILD_LABEL = "clinical-workspace-v8"
+BUILD_LABEL = "clinical-workspace-v9"
 DEFAULT_REVIEW_BUDGET = 30
 PAGE_SIZE = 8
-NAVIGATION = ["Review queue", "Experiment results", "About the POC"]
+NAVIGATION = ["Product integration", "Review queue", "Experiment results", "About the POC"]
 ORDER_LABELS = {"Rules-led": "Rules baseline", "Experimental model": "Experimental ML"}
 COLLECTIONS = ["Presentation demo (3 plans)", "All demonstration scenarios", "Evaluation holdout"]
 
@@ -582,22 +583,28 @@ def display_initiative(split, queue: pd.DataFrame) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="JobPlan | Review queue", layout="wide")
+    st.set_page_config(page_title="JobPlan | Review integration", layout="wide")
     apply_theme()
-    try:
-        split, model, evaluation_queue = load_demo()
-    except ValueError as exc:
-        st.error(f"Demo cannot be scored: {exc}")
-        st.stop()
-
-    _, scenario_queue = load_scenarios()
-    initialise_view(evaluation_queue, scenario_queue)
+    for key in ("search", "order", "priority_filter", "collection", "budget",
+                "selected_plan", "specialties", "patterns", "stages"):
+        if key in st.session_state:
+            st.session_state[key] = st.session_state[key]
     st.sidebar.title("JobPlan review")
     st.sidebar.caption("Fictional demonstration")
     navigation = st.sidebar.radio("Workspace", NAVIGATION, key="navigation")
     st.sidebar.divider()
     st.sidebar.caption("Prioritise attention, not people.")
     st.sidebar.caption(f"Build: {BUILD_LABEL}")
+    if navigation == "Product integration":
+        display_integration()
+        return
+    try:
+        split, model, evaluation_queue = load_demo()
+    except ValueError as exc:
+        st.error(f"Demo cannot be scored: {exc}")
+        st.stop()
+    _, scenario_queue = load_scenarios()
+    initialise_view(evaluation_queue, scenario_queue)
     if navigation == "About the POC":
         st.title("About the POC")
         st.subheader("Help reviewers decide where to look first")
@@ -611,6 +618,8 @@ def main() -> None:
                     "or a live eJobPlan integration. All plans are fictional.")
         st.caption("Review sooner, Standard review and Data clarification are illustrative display labels, "
                    "not validated clinical review recommendations.")
+        st.caption("Product integration shows a proposed enhancement to the existing JobPlan workflow. "
+                   "It is a fictional wireframe, not a live connection or verified current product screen.")
         with st.expander("A short demonstration"):
             st.write("1. Open JP-004: compare the DCC allocation and working pattern; consider what you would ask.")
             st.write("2. Open JP-005: explain why a missing previous plan needs clarification, not a low score.")

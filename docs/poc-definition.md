@@ -44,13 +44,20 @@ performance scoring, automatic escalation or a live deployment.
 
 ## Workflow and screens
 
+V9 adds a separate **Product integration** presentation landing page: original,
+fictional before/after worklist and detail wireframes. It proposes embedding
+signals into the existing product rather than shipping this standalone POC
+architecture. See the [integration recommendation](product-integration.md).
+Current product implementation, APIs and permissions require validation.
+The v8 review journey below remains available under **Review queue**.
+
 Choose a fictional plan; inspect its change summary and data-quality state;
 compare activities, working pattern and sites; open **Why highlighted?** for
 the actual rule evidence and separate model terms; decide the next human action.
 Missing or contradictory information requires clarification, not a Low score.
 Prioritisation is not a decision.
 
-The v8 presentation keeps Streamlit and a three-item rail: Review queue (default),
+The v8 review presentation keeps Streamlit: Review queue,
 Experiment results, About the POC. Three existing fictional scenarios introduce
 the workflow. Review JobPlan opens one reason, an immediate comparison and
 human options; Back to queue returns. Supporting records and rule traces sit

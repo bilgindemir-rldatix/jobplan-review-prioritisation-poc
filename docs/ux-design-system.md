@@ -15,6 +15,31 @@ Source information and rule evidence are optional; model evidence and what-if
 live in Experiment results. Native minimal toolbar configuration reduces developer
 chrome; it is not a production authentication or permission boundary.
 
+## V9 product integration presentation
+
+**Product integration** is the new presentation landing page. A labelled
+Existing-style / With review signals switch shows the same fictional worklist
+and current-plan content before/after an optional metadata/panel addition.
+The current product's screens, components and permissions are not confirmed;
+all are marked as requiring validation. Native dataframes retain scrolling and
+the worklist provides a full-text alternative. The original Review queue,
+Experiment and About remain available as POC evidence, not a proposed new
+enterprise navigation system. No new CSS, assets or dependencies are introduced.
+
+See [product integration](product-integration.md) for the architecture, contracts,
+permission/flag/failure proposals and 5–7 minute storyboard. These are proposals,
+not implemented production services or a validated design-system integration.
+
+V9 verification: 105 tests with warnings treated as errors, covering additive
+metadata, unchanged source/content, unavailable-model independence, missing
+comparison and retained POC filters/exports. Four representative desktop
+before/after views and tablet/narrow variants were inspected on an isolated
+preview. No page-level horizontal overflow was measured; native dataframes
+retain internal horizontal scrolling and a worklist text alternative.
+Key changes in the small panel use wrapping previous-to-current text so both
+values remain visible at tablet widths. Full manual accessibility, product-RBAC
+assurance and clinician/stakeholder research remain unexecuted.
+
 ## V7 baseline: assessment and accepted direction
 
 V6 made exact evidence available, but five competing tabs, adjacent dense
@@ -41,7 +66,11 @@ The redesign is implemented, not merely a proposal. User testing is still needed
 
 ```text
 JobPlan review
-  Review queue (default)
+  Product integration (presentation default)
+    Existing-style / With review signals worklist
+    Open JobPlan -> existing-style / enhanced review
+    Integration proposal download
+  Review queue
     Three fictional plans, one compact count summary
     Review JobPlan
       One reason -> What changed? -> What would you do next?
@@ -58,7 +87,7 @@ JobPlan review
 
 Native radio navigation is deliberately small and requires no routing framework.
 No Overview, My Reviews or separate detail navigation item. The footer exposes
-**Build: clinical-workspace-v8**. Navigation may collapse on small screens.
+**Build: clinical-workspace-v9**. Navigation may collapse on small screens.
 No live workflow, approval, message-sending, authorisation boundary or saved
 review action is implied.
 

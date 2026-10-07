@@ -5,6 +5,15 @@ which JobPlans to review first**. It compares a transparent rules baseline with
 an experimental, interpretable learned model, using **entirely fictional
 synthetic data**.
 
+V9 adds a [native-product integration proposal](docs/product-integration.md):
+where this could fit in the existing Medics/JobPlan worklist and review screen,
+what could be reused, proposed data/contracts/permissions/failure behaviour, and
+a conditional path to a pilot. **Product integration** is the new presentation
+landing page, with existing-style/enhanced worklist and detail wireframes.
+These are original fictional representations, not verified product screens.
+**Requires validation against current JobPlan implementation.**
+This repository remains a standalone POC, not the proposed production architecture.
+
 **Prioritise attention, not people. Highlight change or uncertainty, not wrongdoing.**
 
 Research definition and gaps: [POC Definition v1](docs/poc-definition.md).
@@ -44,7 +53,7 @@ additional UI framework or runtime dependency is introduced.
 
 ### Updating an already running demo
 
-The current interface shows **Build: clinical-workspace-v8** in the navigation
+The current interface shows **Build: clinical-workspace-v9** in the navigation
 rail footer and **About the POC**. Check this marker rather than assuming a browser
 refresh loads changed Python modules. If it is absent, stop **your own demo
 server** with Ctrl+C in its original terminal, change to this checkout and run:
@@ -94,14 +103,17 @@ assets or dynamic HTML. Its [design system](docs/ux-design-system.md) records
 tokens, accessibility checks, before/after decisions and CSS fallbacks.
 Scoring, rules, generation, evaluation and export engines/schema are unchanged.
 
-The navigation is **Review queue** (default), **Experiment results** and
-**About the POC**. The default queue contains three existing fictional examples:
+The presentation navigation is **Product integration** (new default),
+**Review queue**, **Experiment results** and **About the POC**. It is not a
+claim about the existing product's navigation. Review queue retains the v8
+three-plan demonstration. The queue contains three existing fictional examples:
 JP-004 (substantial changes), JP-002 (small change) and JP-005 (missing previous
 plan). They remain excluded from model fitting and evaluation. See the
 [assessment and 3–5 minute demo script](docs/demo-guide.md).
 
 | Area | Purpose |
 |---|---|
+| Product integration | Before/after worklist and review wireframes; small signals panel; downloadable 5–7 minute presentation with architecture and validation questions |
 | Review queue | Three cards: identity/service, category, one source-derived reason, Review JobPlan |
 | JobPlan detail | One reason, immediate signed before/after comparison, working pattern, unselected human options |
 | See details | Supporting information, source activities and a rule-only evidence dialog |

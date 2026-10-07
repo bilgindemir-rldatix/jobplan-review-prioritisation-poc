@@ -3,6 +3,11 @@
 **One sentence:** This helps a Clinical Director decide where to look first,
 tells them what changed, and leaves the decision with them.
 
+This three-plan POC script remains available under **Review queue**. V9 opens
+instead on **Product integration**; use its [5–7 minute integration storyboard](product-integration.md)
+to present the proposed fit within the existing product. Neither set of
+wireframes is a confirmed representation of current JobPlan implementation.
+
 **Prioritise attention, not people.** The two-minute understanding goal and
 three-to-five-minute script below are design targets, not measured user results.
 

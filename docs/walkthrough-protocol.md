@@ -10,6 +10,10 @@ Do not invent percentage targets after seeing results.
 
 ## Preparation
 
+For the retained POC tasks, select **Review queue** from the v9 presentation
+navigation. **Product integration** is a separate conceptual before/after
+presentation, not a connected or permission-tested product prototype.
+
 Confirm participants are appropriate Clinical Directors/authorised reviewers
 and agree consent, recording and minimisation arrangements. Explain that no
 real decision is made, no clinical safety claim exists and disagreement with
