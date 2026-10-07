@@ -12,11 +12,12 @@ import pandas as pd
 from jobplan_poc.evaluation import rank_queue
 from jobplan_poc.features import FEATURE_LABELS
 from jobplan_poc.scoring import ReviewModel
+from jobplan_poc.rules import RULESET_VERSION
 from jobplan_poc.synthetic import DEFAULT_SEED, REFERENCE_DATE, TEST_START
 
 
-EXPORT_VERSION = "1.0"
-SCORING_VERSION = "rules-v1"
+EXPORT_VERSION = "2.0"
+SCORING_VERSION = RULESET_VERSION
 MODEL_VERSION = "standardised-logistic-v1"
 SYNTHETIC_NOTICE = (
     "Fictional synthetic data only; review prioritisation support, not clinical quality, "
@@ -56,7 +57,7 @@ def filtered_queue(queue: pd.DataFrame, config: ViewConfig) -> pd.DataFrame:
     if query:
         def searchable(row):
             reasons = [
-                FEATURE_LABELS[name]
+                FEATURE_LABELS.get(name, name)
                 for column in ("baseline_contributions", "model_contributions")
                 for name, value in row[column].items() if value != 0
             ]
@@ -129,9 +130,13 @@ def export_payload(queue: pd.DataFrame, config: ViewConfig, model: ReviewModel) 
     return _json_value({
         "metadata": {
             "export_schema_version": EXPORT_VERSION,
-            "scoring_version": SCORING_VERSION, "model_version": MODEL_VERSION,
+            "scoring_version": SCORING_VERSION if queue["rule_ids"].map(bool).any() else "rules-v1",
+            "model_version": MODEL_VERSION,
+            "legacy_scoring_version": "rules-v1",
             "synthetic_notice": SYNTHETIC_NOTICE,
-            "scope": "Current filtered original-plan holdout queue; no what-if edits; not limited to K.",
+            "scope": "Current filtered original-plan queue in the declared cohort; no what-if edits; not limited to K.",
+            "cohorts": sorted(queue["cohort"].unique().tolist()),
+            "demonstration_policy": "Demonstration scenarios have no outcome labels and never enter training or evaluation.",
             "filters": configuration,
             "priority_source": config.source,
             "unscored_policy": "Included when search and non-priority filters match; priority filter does not hide them.",

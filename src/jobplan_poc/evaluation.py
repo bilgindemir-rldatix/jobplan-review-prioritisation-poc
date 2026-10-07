@@ -7,6 +7,7 @@ import pandas as pd
 
 from jobplan_poc.features import extract_features
 from jobplan_poc.scoring import ReviewModel, score_baseline
+from jobplan_poc.rules import assess_rules
 from jobplan_poc.synthetic import REFERENCE_DATE, TEST_START
 
 
@@ -18,6 +19,8 @@ class TemporalSplit:
 
 
 def temporal_split(records: pd.DataFrame) -> TemporalSplit:
+    if "cohort" in records and not records["cohort"].eq("evaluation").all():
+        raise ValueError("Temporal evaluation excludes demonstration scenarios; supply only the evaluation cohort.")
     if records["plan_id"].isna().any() or records["plan_id"].duplicated().any():
         raise ValueError("Plan IDs must be present and unique.")
     if records["entity_id"].isna().any():
@@ -40,7 +43,9 @@ def temporal_split(records: pd.DataFrame) -> TemporalSplit:
 def score_queue(records: pd.DataFrame, model: ReviewModel) -> pd.DataFrame:
     rows = []
     for record in records.to_dict("records"):
-        baseline = score_baseline(record)
+        legacy = score_baseline(record)
+        assessment = assess_rules(record) if "versions" in record else None
+        baseline = assessment.score if assessment else legacy
         ml = model.score(record)
         features = extract_features(record)
         rows.append({
@@ -68,6 +73,18 @@ def score_queue(records: pd.DataFrame, model: ReviewModel) -> pd.DataFrame:
             "model_decision": ml.decision,
             "baseline_explanation_space": baseline.explanation_space,
             "model_explanation_space": ml.explanation_space,
+            "legacy_baseline_index": legacy.index,
+            "rule_traces": assessment.export_traces() if assessment else [],
+            "rule_ids": [trace.rule_id for trace in assessment.traces] if assessment else [],
+            "data_quality_state": "Data clarification required" if baseline.index is None else "Required inputs reconciled",
+            "cohort": record.get("cohort", "evaluation"),
+            "generator_version": record.get("generator_version", "legacy-flat-v1"),
+            "generator_seed": record.get("generator_seed"),
+            "change_summary": (
+                "Priority cannot be reliably calculated" if baseline.index is None else
+                f"Total PA {record['previous_total_pa']:g} to {record['current_total_pa']:g}; "
+                f"WTE {record['previous_wte']:g} to {record['current_wte']:g}"
+            ),
         })
     return pd.DataFrame(rows, columns=[
         "plan_id", "specialty", "department", "working_pattern", "workflow_stage", "snapshot_date",
@@ -76,6 +93,8 @@ def score_queue(records: pd.DataFrame, model: ReviewModel) -> pd.DataFrame:
         "baseline_main_driver", "model_main_driver", "baseline_action", "model_action",
         "completeness_percent", "input_errors", "baseline_contributions", "model_contributions",
         "model_intercept", "model_decision", "baseline_explanation_space", "model_explanation_space",
+        "legacy_baseline_index", "rule_traces", "rule_ids", "data_quality_state",
+        "cohort", "generator_version", "generator_seed", "change_summary",
     ])
 
 

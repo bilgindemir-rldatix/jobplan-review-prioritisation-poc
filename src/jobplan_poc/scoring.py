@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from jobplan_poc.features import FEATURE_LABELS, FEATURE_NAMES, extract_features, feature_frame
+from jobplan_poc.records import linked_what_if
 
 
 RULES = {
@@ -52,7 +53,7 @@ class Score:
             return "Not available: resolve required input data."
         name = max(self.contributions, key=lambda feature: abs(self.contributions[feature]))
         value = self.contributions[name]
-        return f"{FEATURE_LABELS[name]}: {value:+.2f} {self.explanation_space}"
+        return f"{FEATURE_LABELS.get(name, name)}: {value:+.2f} {self.explanation_space}"
 
 
 def category(index: float) -> str:
@@ -101,6 +102,8 @@ class ReviewModel:
 
 
 def fit_model(training: pd.DataFrame) -> ReviewModel:
+    if "cohort" in training and not training["cohort"].eq("evaluation").all():
+        raise ValueError("Model training accepts only evaluation-cohort records, never demonstration scenarios.")
     frame, mask = feature_frame(training)
     if len(frame) < 10:
         raise ValueError("Model unavailable: at least 10 sufficient training records are required.")
@@ -126,4 +129,9 @@ def what_if(record: dict, updates: dict, model: ReviewModel) -> tuple[dict, Scor
     if not set(updates).issubset(allowed):
         raise ValueError("What-if updates must contain only supported pre-review scenario inputs.")
     scenario = {**record, **updates}
+    if "versions" in record:
+        from jobplan_poc.rules import assess_rules
+
+        scenario = linked_what_if(record, updates)
+        return scenario, assess_rules(scenario).score, model.score(scenario)
     return scenario, score_baseline(scenario), model.score(scenario)

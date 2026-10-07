@@ -89,7 +89,7 @@ def test_exports_deterministic_numeric_faithful_and_unscored(demo):
     assert decoded["metadata"]["priority_source"] == "model"
     assert decoded["metadata"]["scoring_version"] == "rules-v1"
     assert decoded["metadata"]["model_version"] == "standardised-logistic-v1"
-    assert decoded["metadata"]["export_schema_version"] == "1.0"
+    assert decoded["metadata"]["export_schema_version"] == "2.0"
     for plan in decoded["plans"]:
         original = queue.set_index("plan_id").loc[plan["plan_id"]]
         assert "material_amendment" not in plan
