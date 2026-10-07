@@ -1,11 +1,21 @@
-# V7 review experience and design system
+# Review experience and design system
 
 **Prioritise attention, not people.** RLDatix-inspired colour direction only:
 no logos, proprietary assets or claim that this is an official design.
 The accepted direction stays on Streamlit. This is a presentation change,
 not a new clinical workflow or model experiment.
 
-## Assessment and accepted direction
+## V8 simplification
+
+The [assessment and demo guide](demo-guide.md) supersede the v7 screen hierarchy
+below, not its theme or accessibility safeguards. V8 opens on three existing
+fictional examples. Cards retain only identity/service, one category, one reason
+and Review JobPlan. Detail shows the comparison immediately, then human options.
+Source information and rule evidence are optional; model evidence and what-if
+live in Experiment results. Native minimal toolbar configuration reduces developer
+chrome; it is not a production authentication or permission boundary.
+
+## V7 baseline: assessment and accepted direction
 
 V6 made exact evidence available, but five competing tabs, adjacent dense
 tables and visible indices asked reviewers to interpret the experiment before
@@ -32,20 +42,23 @@ The redesign is implemented, not merely a proposal. User testing is still needed
 ```text
 JobPlan review
   Review queue (default)
-    Search / order / service filters / summary filters / demonstration toggle
-    View JobPlan or Request data clarification
-      JobPlan detail -> Why is this highlighted? (dialog)
-      Compare versions / activity records / isolated what-if
-      Reviewer consideration (temporary UI choice, no persisted decision)
-  Rules vs ML
-    Budget / benchmark / overlap / disagreements / model behaviour
-    Service workload / filtered original-plan export
-  About this POC
+    Three fictional plans, one compact count summary
+    Review JobPlan
+      One reason -> What changed? -> What would you do next?
+      See details -> source information / exact rule evidence dialog
+  Experiment results
+    Simple rules/ML/oldest-first result
+    Evidence / budget / overlap / disagreements / model behaviour
+    Demo settings / full collections / filters / analysis order
+    Plan inspection / model dialog / isolated what-if
+    Service workload / original-plan analysis export
+  About the POC
+    Short story / optional demo script / research notes
 ```
 
 Native radio navigation is deliberately small and requires no routing framework.
 No Overview, My Reviews or separate detail navigation item. The footer exposes
-**Build: clinical-workspace-v7**. Navigation may collapse on small screens.
+**Build: clinical-workspace-v8**. Navigation may collapse on small screens.
 No live workflow, approval, message-sending, authorisation boundary or saved
 review action is implied.
 
@@ -107,23 +120,24 @@ These React names are a future mapping, **not implemented React components**.
 | AppShell / Sidebar | `set_page_config`, `sidebar`, three-option `radio`, footer marker |
 | PageHeader | Native title and concise notice; detail has Back to queue |
 | PriorityBadge / DataQualityBadge | `badge` with text + Material icon; amber/neutral, no numeric score |
-| ReviewQueueTable | Wrapped `container(border=True)` cards with native buttons, eight items per section/page |
-| ChangeSummary | Source-derived bullets; first five visible, remaining activity/pattern changes disclosed |
+| ReviewQueueTable | Three native cards by default; full collections paginate eight items per section |
+| ChangeSummary | Immediate changed rows and working pattern; detailed source-derived bullets disclosed |
 | PlanComparison | Changed numeric rows in a native table; unchanged measures and activity records disclosed |
 | ReasonPanel | Plain source-faithful reason, not the old points-formatted main-driver label |
 | RuleDetails | One native expander per exact versioned trace, including JSON inputs/threshold/state |
-| ModelDetails | Separate panel and View model details expander; exact index, signed terms and reference |
+| ModelDetails | Experiment-only dialog and Why the model highlighted this disclosure; exact index, signed terms and reference |
 | ReviewerActions | Unselected native radio options, no submission or saved decision |
 
-The reason uses the two largest non-zero rule terms, in existing trace order
-for ties. It says "changed", not "material", unless evidence justifies that word.
-No severity is invented. Rule counts include partial non-zero signals; withheld
-calculations are not treated as zero. Notable changes use validated source totals
+The primary reason names actual DCC/SPA differences and working-pattern change
+when present; otherwise it uses the two largest non-zero rule terms. Exact rule
+details retain the trace-based reason. Neither is a causal explanation or a
+judgement about appropriateness. No severity is invented; withheld calculations
+are not treated as zero. Notable changes use validated source totals
 and stable activity matching; session-set differences do not invent a specific
 activity move. Missing previous snapshot dates are explicitly unavailable.
 
 The category mapping is display-only: High -> Review sooner; Medium + Low ->
-Standard review; insufficient data -> Data clarification required. Thresholds,
+Standard review; insufficient data -> Data clarification. Thresholds,
 raw indices, legacy actions and export category fields are unchanged. "Review
 sooner" is an illustrative label, not independently validated earlier-review need.
 The target remains **synthetic amendment after review**.
@@ -141,14 +155,16 @@ makes the count unavailable rather than silently treating it as complete.
 
 ## Scope and isolation
 
-Search/service/pattern/stage scope precedes category filtering. The three counts
-refer to that pre-category scope; selected categories restrict scored cards.
+Search/service/pattern/stage scope precedes category filtering. The compact count
+summary describes the displayed review view; selected categories restrict scored cards.
 Matching clarification records stay visible and remain in exports. Pagination
 affects display only. Reset clears filters/search/order and detail, not the
-collection, experiment budget, records or fitting. Hidden native widget keys are
+collection, experiment budget, records or fitting. Reset presentation demo also
+restores the three-example collection; switching collection resets its filters.
+Hidden native widget keys are
 retained across navigation to prevent exports silently losing the selected scope.
 
-Rules vs ML keeps the unchanged five-method evaluator and default results.
+Experiment results keeps the unchanged five-method evaluator and default results.
 Overlap/disagreement replaces any proposed opaque "combined" ranking.
 Largest mean absolute model terms describe this fitted model on the full
 eligible holdout, not causal importance. Workload uses the filtered original
@@ -165,14 +181,15 @@ These are implementation hooks, **not a guaranteed public DOM contract**.
 Recheck after any Streamlit upgrade. If a hook changes, the native radio, buttons,
 cards, labels, dialogs and tables still function; visual/contrast checks must
 be repeated before accepting a changed runtime. The native configuration is
-the main theme; CSS supplies density, full-opacity captions and focus treatment.
+the main theme; CSS supplies density, full-opacity captions, 14px comparison
+cells with opaque text, focus treatment and narrow-header clearance.
 
 ## Accessibility verification and limits
 
 - Automated: contrast calculations, category/text state mapping, faithful reasons,
   explicit missing findings, unknown-count fallback, escaping/static-only HTML,
   native interaction state, dialog layers, isolation and evaluator regressions.
-- Browser checks: representative desktop (1440px), tablet-sized (1024px) and
+- V7 browser baseline: representative desktop (1440px), tablet-sized (1024px) and
   narrow (390px) queue, detail, dialog, clarification, Rules vs ML and About
   renders inspected, plus scrolled comparison/clarification content. No page-level
   horizontal overflow in these checks; technical dataframes scroll within their
@@ -197,6 +214,14 @@ The separate walkthrough protocol remains **unexecuted**.
 The final v7 regression run passed **99 tests** with warnings treated as errors.
 Generation, validation, scoring, rules, model, evaluation and schema-2 export
 engine files were also checked unchanged against v6. No dependencies were added.
+
+V8 regression: **100 tests** with warnings treated as errors. The three-plan
+queue, immediate comparison/judgement, missing-plan detail, Experiment and About
+were checked at desktop/tablet/narrow sizes as applicable. Native review buttons
+measured 40px and a keyboard-focused button showed the 3px outline. Minimal
+toolbar configuration removed the Deploy control. Narrow header overlap and
+translucent native table labels found during inspection were corrected.
+These checks do not establish the two-minute understanding goal.
 
 ## Final visual direction
 

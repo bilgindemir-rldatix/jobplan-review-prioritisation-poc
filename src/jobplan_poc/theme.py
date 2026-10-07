@@ -18,6 +18,8 @@ CSS = ":root {" + "".join(f"--{key}:{value};" for key, value in TOKENS.items()) 
 [data-testid="stCaptionContainer"] {opacity: 1;}
 [data-testid="stDialog"] h3 {font-size: 18px; font-weight: 600;}
 [data-testid="stText"] {font-family: inherit; line-height: 1.5;}
+[data-testid="stTable"] th, [data-testid="stTable"] td {font-size: 14px; color: var(--text);}
+[data-testid="stTable"] th {color: var(--text-secondary);}
 [data-testid="stButton"] button, [data-testid="stDownloadButton"] button {min-height: 40px;}
 [data-testid="stTextInputRootElement"],
 [data-testid="stSelectbox"] [role="group"] {min-height: 44px;}
@@ -51,7 +53,7 @@ div[class*="st-key-plan-card-"]:hover {background: var(--mint);}
 }
 [data-testid="stSidebar"] button:focus-visible {outline: 3px solid var(--surface); outline-offset: 2px;}
 @media (max-width: 700px) {
-    [data-testid="stMainBlockContainer"] {padding-left: 16px; padding-right: 16px;}
+    [data-testid="stMainBlockContainer"] {padding-top: 56px; padding-left: 16px; padding-right: 16px;}
 }
 """
 

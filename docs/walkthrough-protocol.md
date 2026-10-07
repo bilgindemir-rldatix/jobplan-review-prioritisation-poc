@@ -15,10 +15,14 @@ and agree consent, recording and minimisation arrangements. Explain that no
 real decision is made, no clinical safety claim exists and disagreement with
 an index is appropriate. Record build, generator seed/version, rule catalogue,
 thresholds, model version, budget, displayed collection and facilitator prompts.
-In v7, open cases through **View JobPlan** (or **Request data clarification**),
-then **Why is this highlighted?**. The queue-header **Demonstration scenarios**
-toggle switches the fictional collection. Budget and evidence are on **Rules vs ML**.
+In v8, open the three presentation cases through **Review JobPlan**.
+**See details → Inspect exact rule evidence** opens the rule dialog.
+**Experiment results → Demo settings and full plan collections** selects all nine
+cases or the holdout. Budget, model evidence and what-if are also secondary there.
 Neither selecting a reviewer option nor opening clarification sends a request.
+Start with the [short demo script](demo-guide.md), then record whether an
+unprompted participant can explain purpose, signals, missing data and human
+ownership. The two-minute understanding goal is not an achieved study result.
 
 Obtain an independently reviewed assessment rubric before assessing H3/H4:
 earlier attention, routine order, clarification and uncertain must be distinct.

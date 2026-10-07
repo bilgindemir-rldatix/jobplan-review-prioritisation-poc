@@ -8,7 +8,7 @@ import pytest
 from jobplan_poc.dataset import demonstration_plans
 from jobplan_poc.review_display import (
     comparison_rows, display_category, information_items, markdown_text, model_signals,
-    notable_changes, plain_reason, previous_snapshot_label, rules_applied,
+    PRESENTATION_IDS, notable_changes, plain_reason, previous_snapshot_label, review_reason, rules_applied,
 )
 from jobplan_poc.rules import assess_rules
 from jobplan_poc.theme import CSS, TOKENS
@@ -21,7 +21,7 @@ def cases():
 
 def test_display_categories_do_not_recalculate_indices():
     assert [display_category(value) for value in ("High", "Medium", "Low", "Unscored")] == [
-        "Review sooner", "Standard review", "Standard review", "Data clarification required",
+        "Review sooner", "Standard review", "Standard review", "Data clarification",
     ]
     with pytest.raises(KeyError):
         display_category("Safe")
@@ -76,6 +76,26 @@ def test_partial_signals_and_withheld_comparisons(cases):
     assert sum(information_items(incomplete).values()) == 7  # Known percentage is a valid input, not confidence.
     incomplete["review_due_date"] = None
     assert information_items(incomplete)["Review due date"] is False
+
+
+def test_presentation_subset_and_concise_reasons_are_source_faithful(cases):
+    assert PRESENTATION_IDS == ("JP-004", "JP-002", "JP-005")
+    assert all(cases[key]["cohort"] == "demonstration" for key in PRESENTATION_IDS)
+    expected = {
+        "JP-004": "DCC allocation decreased by 6 PA and the working pattern changed.",
+        "JP-002": "DCC allocation decreased by 0.2 PA and SPA allocation increased by 0.2 PA.",
+        "JP-005": "The previous plan is missing, so changes cannot be compared.",
+    }
+    original = deepcopy(cases)
+    for key, record in cases.items():
+        traces = assess_rules(record).export_traces()
+        reason = review_reason(record, traces)
+        assert reason == review_reason(record, traces)
+        if key in expected:
+            assert reason == expected[key]
+        assert not any(term in reason for term in ("R-0", "model", "confidence", "/100"))
+    assert cases == original
+    assert "No change was identified" in review_reason(cases["JP-009"], assess_rules(cases["JP-009"]).export_traces())
 
 
 def test_unknown_validation_finding_never_reports_complete(cases, monkeypatch):

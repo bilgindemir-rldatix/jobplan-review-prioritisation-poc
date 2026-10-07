@@ -44,8 +44,8 @@ additional UI framework or runtime dependency is introduced.
 
 ### Updating an already running demo
 
-The current interface shows **Build: clinical-workspace-v7** in the navigation
-rail footer and **About this POC**. Check this marker rather than assuming a browser
+The current interface shows **Build: clinical-workspace-v8** in the navigation
+rail footer and **About the POC**. Check this marker rather than assuming a browser
 refresh loads changed Python modules. If it is absent, stop **your own demo
 server** with Ctrl+C in its original terminal, change to this checkout and run:
 
@@ -88,71 +88,70 @@ fictional JP cases, never training or evaluation records. Collection changes
 retain the current filters; reset them if no cases match. Evidence and the
 About-page benchmark always use the evaluation holdout, never demonstrations.
 
-V7 is a **presentation-only redesign**: a deep-teal rail, neutral surfaces,
+V8 simplifies the product demonstration without changing the engines: a deep-teal rail, neutral surfaces,
 native controls and one static scoped CSS block. No JavaScript, proprietary
 assets or dynamic HTML. Its [design system](docs/ux-design-system.md) records
 tokens, accessibility checks, before/after decisions and CSS fallbacks.
 Scoring, rules, generation, evaluation and export engines/schema are unchanged.
 
-The smallest navigation is **Review queue** (default), **Rules vs ML** and
-**About this POC**. Detail opens from a plan action, not a navigation item.
+The navigation is **Review queue** (default), **Experiment results** and
+**About the POC**. The default queue contains three existing fictional examples:
+JP-004 (substantial changes), JP-002 (small change) and JP-005 (missing previous
+plan). They remain excluded from model fitting and evaluation. See the
+[assessment and 3–5 minute demo script](docs/demo-guide.md).
 
 | Area | Purpose |
 |---|---|
-| Review queue | Three count/filter buttons, search, order selector, reason-first native plan cards; no indices or rule IDs |
-| Data clarification | Separate section naming actual missing/invalid information; Request data clarification opens detail but sends nothing |
-| JobPlan detail | Back to queue, observed changes, signed comparison, source activities, working pattern and human-owned options |
-| Why is this highlighted? | Native dialog: plain reason, exact versioned rule evidence, separate experimental model disclosure |
-| Rules vs ML | Full-holdout five-method comparison, budget, overlap/disagreement, model behaviour, service workload and original-plan exports |
-| About this POC | Product problem, hypotheses, fictional journey, current scope, actual learning and proposed decision gates |
+| Review queue | Three cards: identity/service, category, one source-derived reason, Review JobPlan |
+| JobPlan detail | One reason, immediate signed before/after comparison, working pattern, unselected human options |
+| See details | Supporting information, source activities and a rule-only evidence dialog |
+| Experiment results | Visible simple comparison; disclosed full evidence, settings, model terms, what-if, workload and original-plan exports |
+| About the POC | Short problem/purpose/ML/human-decision story, optional script and research notes |
 
 **Review sooner** maps to the existing High category; **Standard review**
-combines Medium and Low; **Data clarification required** maps to missing/invalid
+combines Medium and Low; **Data clarification** maps to missing/invalid
 required data. These are illustrative display settings, not policy, a new
 scoring rule or a validated earlier-review target. The target remains synthetic
 amendment. Legacy categories and actions remain unchanged in exports and
 technical evidence; the simplified human options are not automated recommendations.
 
-Click a count to filter, and click it again to restore all categories. Counts
-reflect search/service/pattern/stage scope **before category filtering**.
-Matching clarification records always remain in their own section, even with
-Review sooner or Standard review selected, preserving the export/triage policy.
-Selecting Data clarification hides scored cards, not their underlying data.
+**Review JobPlan** opens the comparison; **Back to queue** restores the current
+page and scope. The primary queue is always rules-led, with no model signal,
+numeric index, rule ID or missing-date placeholder. Reasons describe actual
+allocation/pattern differences, not causes or judgements. Totals are derived
+from validated linked activities; missing comparisons are withheld, never zero.
+Unchanged measures, exact activity changes and checklists sit under See details.
+Linked v1 has no previous-version date; supporting details say it is not recorded.
 
-**View JobPlan** opens a focused detail page. **Back to queue** restores the
-current page and scope. Pagination shows eight cards per section; counts,
-relative model wording, workload and exports use the **whole** filtered view,
-not only the visible page. No index or rule ID is displayed on a queue card.
-The main sentence describes the largest non-zero rule terms, not causal
-importance. "Rules apply" counts non-zero signals, including partial signals;
-thresholds and points remain exact in the explanation dialog.
+**Experiment results → Demo settings and full plan collections** retains all nine
+scenarios, the full holdout, search and filters. Switching collection clears
+filters and selection so a prior narrow scope cannot hide the new collection.
+The analysis order affects the experiment's inspection/workload/export only:
+its priority filter uses that method's categories; the reviewer queue always
+uses rule categories. Matching clarification records bypass the priority filter
+but not search/service filters. Full collections paginate eight cards per section.
+Their clarification records have a separate section; the three-case demo needs
+no extra section heading. Summary counts describe the current review view.
 
-The experimental model line says higher/lower than most other eligible plans
-only when a **strict majority** has a lower/higher index. Ties can yield neither;
-a singleton has no comparison. This is relative position, not uncertainty,
-confidence or clinical need. Changing filters can change this wording without
-changing any model index. A plan with no change-rule signals can still have
-an experimental administrative signal; the UI keeps these explanations separate.
-
-Linked v1 has **no previous-version snapshot date**. Cards explicitly say
-"not recorded"; the current snapshot is never presented as the previous date.
-Totals come from validated linked activities. Comparison highlights changed
-rows with signed differences and keeps unchanged measures in a disclosure.
-Session additions/removals do not imply a particular activity moved: actual
-per-activity changes are separately matched by stable ID.
+The optional model dialog retains strict-majority higher/lower relative signals,
+with ties and singleton cases explicit. These are not confidence, probability,
+causal importance or clinical need. Exact signed terms and rule traces are not
+merged. ML is absent from the primary review journey.
 
 **Reset filters & search** restores the current collection's service, pattern,
 stage and category scope, clears search, restores rules ordering and closes
 detail. It preserves collection and experimental budget; it never changes
 records, model fitting or scenario inputs. Hidden controls retain their state
 across navigation. A selected plan outside the current scope is cleared,
-never silently replaced. A no-result state points to reset and clarification.
+never silently replaced. **Reset presentation demo** restores the three examples
+and clears filters/selection, preserving the budget and isolated scenario inputs.
+A no-result reviewer view offers this recovery directly.
 
 Reviewer radio options are **not recommendations** and save no decision or
-request. A temporary radio selection is UI state only. What-if remains a
-secondary expander, and its submitted results disappear on unrelated interaction.
+request. A temporary radio selection is UI state only. What-if is in Experiment
+results; its submitted results disappear on unrelated interaction.
 
-### About this POC: the Product conversation
+### About the POC: the Product conversation
 
 The About page explains the finite-review-time problem and the hypothesis of
 more understandable, focused prioritisation without claiming time savings or
@@ -168,7 +167,7 @@ result is rules **8**, ML **6**, oldest-first **7** synthetic amendments found.
 The new activity-change rules happen to find the same count as the old baseline;
 they are not the same index. Both are identified in Evidence.
 ML has not demonstrated advantage here; Product can assess workflow value even
-if transparent rules are preferable. Rules vs ML remains the place to vary
+if transparent rules are preferable. Experiment results remains the place to vary
 the review budget. Neither table validates future real-world review need.
 
 Decision gates cover an independently reviewed outcome definition, approved
@@ -217,7 +216,7 @@ source data. They are **not causal estimates or advice to obtain a better score*
 
 ### Service-workload denominators
 
-The small service view in Rules vs ML contains only the current filtered
+The small service view in Experiment results contains only the current filtered
 original-plan collection. For each specialty, `total_plans = scored_plans + unscored_plans`, and
 `high_priority_rate_among_scored = high_priority_plans / scored_plans`, using the
 selected scoring source. Rates are proportions from 0 to 1, not percentages.

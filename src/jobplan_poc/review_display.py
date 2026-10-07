@@ -13,8 +13,9 @@ DISPLAY_CATEGORIES = {
     "High": "Review sooner",
     "Medium": "Standard review",
     "Low": "Standard review",
-    "Unscored": "Data clarification required",
+    "Unscored": "Data clarification",
 }
+PRESENTATION_IDS = ("JP-004", "JP-002", "JP-005")
 PRIORITY_FILTERS = {
     "All plans": ("High", "Medium", "Low"),
     "Review sooner": ("High",),
@@ -169,3 +170,30 @@ def notable_changes(record: dict) -> list[str]:
 def previous_snapshot_label(record: dict) -> str:
     # Linked v1 has version identities but no previous-version snapshot date.
     return "Previous-plan snapshot: not recorded in this synthetic fixture"
+
+
+def review_reason(record: dict, traces: list[dict]) -> str:
+    """A short source comparison, not an explanation of a model's judgement."""
+    errors = extract_features(record).errors
+    if errors:
+        if any(error.startswith("previous plan unavailable") for error in errors):
+            return "The previous plan is missing, so changes cannot be compared."
+        if any(error.startswith("current plan is partial") for error in errors):
+            return "The current activity list is incomplete, so changes cannot be compared reliably."
+        return errors[0]
+    rows = comparison_rows(record).set_index("Measure")
+    parts = []
+    for label, name in (
+        ("DCC allocation (PA)", "DCC allocation"),
+        ("SPA allocation (PA)", "SPA allocation"),
+    ):
+        difference = rows.loc[label, "Current"] - rows.loc[label, "Previous"]
+        if abs(difference) > 1e-8:
+            parts.append(f"{name} {'increased' if difference > 0 else 'decreased'} by {abs(difference):g} PA")
+    pattern = next(trace for trace in traces if trace["rule_id"] == "R-04")
+    if pattern["signal_strength"] > 0:
+        parts = parts[:1] + ["the working pattern changed"]
+    if parts:
+        sentence = " and ".join(parts)
+        return sentence[0].upper() + sentence[1:] + "."
+    return plain_reason(traces).replace(" This may be entirely legitimate.", "")

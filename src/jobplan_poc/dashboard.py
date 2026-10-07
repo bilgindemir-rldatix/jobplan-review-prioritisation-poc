@@ -15,19 +15,20 @@ from jobplan_poc.presentation import (
     workload_groups,
 )
 from jobplan_poc.review_display import (
-    PRIORITY_FILTERS, comparison_rows, display_category, information_items, markdown_text,
-    model_signals, notable_changes, plain_reason, previous_snapshot_label, rules_applied,
+    PRESENTATION_IDS, PRIORITY_FILTERS, comparison_rows, display_category, information_items, markdown_text,
+    model_signals, notable_changes, plain_reason, previous_snapshot_label, review_reason,
 )
 from jobplan_poc.scoring import ReviewModel, Score, fit_model, what_if
 from jobplan_poc.synthetic import DEFAULT_SEED, REFERENCE_DATE, TEST_START
 from jobplan_poc.theme import apply_theme
 
 
-BUILD_LABEL = "clinical-workspace-v7"
+BUILD_LABEL = "clinical-workspace-v8"
 DEFAULT_REVIEW_BUDGET = 30
 PAGE_SIZE = 8
-NAVIGATION = ["Review queue", "Rules vs ML", "About this POC"]
+NAVIGATION = ["Review queue", "Experiment results", "About the POC"]
 ORDER_LABELS = {"Rules-led": "Rules baseline", "Experimental model": "Experimental ML"}
+COLLECTIONS = ["Presentation demo (3 plans)", "All demonstration scenarios", "Evaluation holdout"]
 
 
 @st.cache_resource
@@ -156,7 +157,7 @@ def priority_badge(category: str) -> None:
 
 
 @st.dialog("Why is this highlighted?", width="large", on_dismiss="rerun")
-def display_explanation(record: dict, model: ReviewModel, signal: str) -> None:
+def display_explanation(record: dict, model: ReviewModel, signal: str, include_model: bool = True) -> None:
     assessment = assess_rules(record)
     st.caption(markdown_text(f"JobPlan {record['plan_id']} · {record['specialty']}"))
     st.subheader("Why this plan appeared")
@@ -176,18 +177,19 @@ def display_explanation(record: dict, model: ReviewModel, signal: str) -> None:
     else:
         st.warning("Rule calculations withheld. Data clarification required.", icon=":material/info:")
         display_information(record, assessment.score.errors)
-    st.divider()
-    st.subheader("Experimental model")
-    st.text("Experimental model signal: " + signal)
-    st.caption("A relative ordering of plans in this view, not a cause, confidence measure or clinical probability.")
-    with st.expander("View model details"):
-        display_score("Experimental model", model.score(record))
-        features = extract_features(record)
-        if features.values is not None:
-            st.table(pd.DataFrame([
-                {"Pre-review feature": FEATURE_LABELS[key], "Value": value}
-                for key, value in features.values.items()
-            ]))
+    if include_model:
+        st.divider()
+        st.subheader("Experimental model")
+        st.text("Experimental model signal: " + signal)
+        st.caption("A relative ordering of plans in this view, not a cause, confidence measure or clinical probability.")
+        with st.expander("Why the model highlighted this"):
+            display_score("Experimental model", model.score(record))
+            features = extract_features(record)
+            if features.values is not None:
+                st.table(pd.DataFrame([
+                    {"Pre-review feature": FEATURE_LABELS[key], "Value": value}
+                    for key, value in features.values.items()
+                ]))
     if st.button("Close explanation", key="close_explanation"):
         st.rerun()
 
@@ -200,57 +202,52 @@ def open_detail(plan_id: str) -> None:
     st.session_state["selected_plan"] = plan_id
 
 
-def display_detail(record: dict, model: ReviewModel, source: str, signal: str) -> None:
+def display_detail(record: dict, model: ReviewModel) -> None:
     st.button("Back to queue", icon=":material/arrow_back:", on_click=close_detail)
     st.title(markdown_text(f"JobPlan {record['plan_id']} · {record['specialty']}"))
     assessment = assess_rules(record)
-    chosen = model.score(record) if source == "model" else assessment.score
-    st.text("Suggested review priority: " + display_category(chosen.category))
-    priority_badge(chosen.category)
-    if st.button("Why is this highlighted?", icon=":material/info:", key="why_highlighted"):
-        display_explanation(record, model, signal)
-    st.subheader("Why this plan appeared")
-    st.text(plain_reason(assessment.export_traces()))
-    st.caption("Priority source: " + ("Experimental model" if source == "model" else "Rules-led"))
-    st.caption(markdown_text(
-        f"{previous_snapshot_label(record)} · Current snapshot: {record['snapshot_date']:%d %b %Y}"
-    ))
-    if record.get("cohort") == "demonstration":
-        st.info(markdown_text(f"Demonstration only: {record['scenario_name']}. {record['scenario_note']}"),
-                icon=":material/science:")
-    display_information(record, chosen.errors, details=True)
-    if chosen.errors:
-        st.warning("Data clarification required. Priority cannot be reliably calculated.", icon=":material/info:")
-    changes = notable_changes(record)
+    priority_badge(assessment.score.category)
+    st.subheader("Why this plan was highlighted")
+    st.text(review_reason(record, assessment.export_traces()))
+    st.subheader("What changed?")
     if validate_sources(record).errors:
-        st.info("Comparison withheld until source information is clarified. Missing activities are not assumed to be zero.")
+        st.info("A reliable comparison is not available. Clarify the missing or contradictory information first.",
+                icon=":material/info:")
     else:
-        st.subheader(f"{len(changes)} notable changes")
-        st.caption("Observed differences, not findings of inappropriate allocation.")
-        if changes:
-            st.markdown("\n".join("- " + markdown_text(change) for change in changes[:5]))
-            if len(changes) > 5:
-                with st.expander(f"{len(changes) - 5} more activity and pattern changes"):
-                    st.markdown("\n".join("- " + markdown_text(change) for change in changes[5:]))
+        comparison = comparison_rows(record)
+        changed = comparison.loc[comparison["Change"] != "No change"]
+        if not changed.empty:
+            st.table(changed.set_index("Measure").style.format({"Previous": "{:.2f}", "Current": "{:.2f}"}))
         else:
             st.text("No observed activity, allocation or working-pattern changes. Continue human review as usual.")
-        with st.expander("Compare versions", expanded=True):
-            st.subheader("Previous vs current")
-            comparison = comparison_rows(record)
-            changed = comparison.loc[comparison["Change"] != "No change"]
-            if not changed.empty:
-                st.table(changed.set_index("Measure").style.format({"Previous": "{:.2f}", "Current": "{:.2f}"}))
-            else:
-                st.text("No allocation or WTE changes.")
-            unchanged = comparison.loc[comparison["Change"] == "No change"]
-            if not unchanged.empty:
-                with st.expander("Unchanged measures"):
-                    st.table(unchanged.set_index("Measure").style.format({"Previous": "{:.2f}", "Current": "{:.2f}"}))
+        if record["versions"]["previous"]["working_pattern"] != record["versions"]["current"]["working_pattern"]:
             st.markdown("**Working pattern**")
             for prefix in ("previous", "current"):
                 st.text(prefix.capitalize() + ": " + ", ".join(record["versions"][prefix]["working_pattern"]))
-            st.caption("PA = programmed activities; DCC = direct clinical care; SPA = supporting professional activities. "
-                       "Illustrative categories. WTE = whole-time equivalent, not a performance measure.")
+        st.caption("PA = programmed activities; DCC = direct clinical care; SPA = supporting professional activities. "
+                   "Changes can be entirely legitimate.")
+    with st.container(border=True):
+        st.subheader("What would you do next?")
+        st.radio(
+            "Reviewer options", ["Continue standard review", "Seek clarification", "Review earlier"],
+            index=None, key=f"consideration-{record['plan_id']}",
+        )
+        st.caption("Your choice is simulated. No decision or request is saved or sent.")
+        st.text("Decision support only. Final judgement remains with the authorised reviewer.")
+    with st.expander("See details"):
+        if record.get("cohort") == "demonstration":
+            st.text(f"Fictional example: {record['scenario_name']}. {record['scenario_note']}")
+        st.caption(markdown_text(previous_snapshot_label(record)))
+        display_information(record, assessment.score.errors, details=True)
+        if st.button("Inspect exact rule evidence", key="why_highlighted"):
+            display_explanation(record, model, "", include_model=False)
+        changes = notable_changes(record)
+        if changes:
+            st.markdown("\n".join("- " + markdown_text(change) for change in changes))
+        comparison = comparison_rows(record)
+        unchanged = comparison.loc[comparison["Change"] == "No change"]
+        if not unchanged.empty:
+            st.table(unchanged.set_index("Measure").style.format({"Previous": "{:.2f}", "Current": "{:.2f}"}))
         with st.expander("Activity records"):
             for activity in activity_comparison(record).to_dict("records"):
                 st.markdown("**" + markdown_text(activity["Activity"]) + "**")
@@ -259,15 +256,6 @@ def display_detail(record: dict, model: ReviewModel, source: str, signal: str) -
                      "Current": str(activity[f"Current {field}"])}
                     for field in ("category", "PA", "session", "site")
                 ]).set_index("Item"))
-    with st.container(border=True):
-        st.subheader("Reviewer consideration")
-        st.caption("Workflow options only, not system recommendations. Selecting one records no decision or request.")
-        st.radio(
-            "Possible next step", ["Continue standard review", "Seek clarification", "Bring forward formal review"],
-            index=None, key=f"consideration-{record['plan_id']}",
-        )
-        st.text("The system highlights review signals only. The decision remains with the authorised reviewer.")
-    display_what_if(record, model)
 
 
 def display_evidence(split, model, queue, budget: int) -> None:
@@ -391,16 +379,17 @@ def reset_review_filters(queue: pd.DataFrame) -> None:
     st.session_state["clarification_page"] = 0
 
 
-def change_priority_filter(label: str) -> None:
-    st.session_state["priority_filter"] = (
-        "All plans" if st.session_state["priority_filter"] == label else label
-    )
-    st.session_state["queue_page"] = 0
-    st.session_state["clarification_page"] = 0
-    close_detail()
+def reset_demo() -> None:
+    st.session_state["collection"] = COLLECTIONS[0]
+    change_collection()
 
 
-def display_cards(view: pd.DataFrame, records: pd.DataFrame, source: str, signals: dict, *, triage=False) -> None:
+def change_collection() -> None:
+    queue = load_demo()[2] if st.session_state["collection"] == "Evaluation holdout" else load_scenarios()[1]
+    reset_review_filters(queue)
+
+
+def display_cards(view: pd.DataFrame, records: pd.DataFrame, *, triage=False) -> None:
     if view.empty:
         st.info("No matching plans in this section. Clear search or use Reset filters & search.")
         return
@@ -425,20 +414,10 @@ def display_cards(view: pd.DataFrame, records: pd.DataFrame, source: str, signal
         with st.container(border=True, key="plan-card-" + row["plan_id"]):
             with st.container(horizontal=True, vertical_alignment="center"):
                 st.markdown("**" + markdown_text(f"{row['plan_id']} · {row['specialty']}") + "**")
-                st.button("Request data clarification" if triage else "View JobPlan", key="view_" + row["plan_id"],
-                          icon=":material/contact_support:" if triage else ":material/arrow_forward:",
-                          on_click=open_detail, args=(row["plan_id"],),
-                          help=("Open " + row["plan_id"] + ". No request is sent or saved." if triage else
-                                "Open " + row["plan_id"] + " and compare the source versions."))
-            priority_badge(row[f"{source}_category"])
-            if triage:
-                display_information(record, row["input_errors"])
-            else:
-                st.markdown("**" + markdown_text(plain_reason(row["rule_traces"])) + "**")
-                count = rules_applied(row["rule_traces"])
-                st.caption(f"{count} {'rule applies' if count == 1 else 'rules apply'} · "
-                           f"Experimental model signal: {signals[row['plan_id']]}")
-                st.caption(previous_snapshot_label(record))
+                st.button("Review JobPlan", key="view_" + row["plan_id"], icon=":material/arrow_forward:",
+                          on_click=open_detail, args=(row["plan_id"],))
+            priority_badge(row["baseline_category"])
+            st.text(review_reason(record, row["rule_traces"]))
 
 
 def change_page(key: str, step: int) -> None:
@@ -540,7 +519,7 @@ def display_initiative(split, queue: pd.DataFrame) -> None:
         f"{int(comparison.iloc[0]['positives'])} synthetic amendments. "
         f"{len(queue) - int(comparison.iloc[0]['cohort'])} unscored plans excluded equally from this comparison, "
         "not from human triage. Independent of the current filters, scenario edits and sidebar budget. "
-        "Ratios are proportions from 0 to 1. Rules vs ML lets you explore a different budget."
+        "Ratios are proportions from 0 to 1. Experiment results lets you explore a different budget."
     )
     st.write(
         "ML has not demonstrated an advantage in this default comparison. The labels teach generator behaviour, "
@@ -562,8 +541,8 @@ def display_initiative(split, queue: pd.DataFrame) -> None:
     )
     with st.expander("Stakeholder walkthrough & plain-language glossary"):
         st.write(
-            "Start in Review queue; use View JobPlan, read the reason and compare activities. "
-            "Inspect Data clarification, try an isolated what-if, then compare methods in Rules vs ML. "
+            "Start in Review queue; use Review JobPlan, read the reason and compare activities. "
+            "Inspect Data clarification, then compare methods or try an isolated what-if in Experiment results. "
             "Ask whether the reasons are understandable and whether the workflow helps a reviewer decide where to look."
         )
         st.write(
@@ -619,38 +598,40 @@ def main() -> None:
     st.sidebar.divider()
     st.sidebar.caption("Prioritise attention, not people.")
     st.sidebar.caption(f"Build: {BUILD_LABEL}")
-    if navigation == "About this POC":
-        st.title("About this POC")
-        display_initiative(split, evaluation_queue)
+    if navigation == "About the POC":
+        st.title("About the POC")
+        st.subheader("Help reviewers decide where to look first")
+        st.write("Clinical Directors have many JobPlans and limited review time. This POC highlights changes "
+                 "or missing information, shows the comparison, and leaves the decision with the reviewer.")
+        st.markdown("**The journey:** choose a plan → see what changed → decide the next human action.")
+        st.markdown("**Why ML?** We are testing whether a learned model adds useful information beyond simple rules. "
+                    "It has not demonstrated an advantage in this synthetic experiment.")
+        st.markdown("**Who decides?** The authorised reviewer. No decision or clarification request is saved or sent.")
+        st.markdown("**What this is not:** clinician assessment, automatic approval, a clinical safety prediction "
+                    "or a live eJobPlan integration. All plans are fictional.")
+        st.caption("Review sooner, Standard review and Data clarification are illustrative display labels, "
+                   "not validated clinical review recommendations.")
+        with st.expander("A short demonstration"):
+            st.write("1. Open JP-004: compare the DCC allocation and working pattern; consider what you would ask.")
+            st.write("2. Open JP-005: explain why a missing previous plan needs clarification, not a low score.")
+            st.write("3. Open JP-002: a small allocation change still receives human review.")
+            st.write("Finish on Experiment results: show the actual comparison, not a promise that ML wins.")
+        with st.expander("Research scope, evidence and proposed next steps"):
+            display_initiative(split, evaluation_queue)
         return
     detail_open = st.session_state.get("selected_plan") is not None
     if navigation == "Review queue" and not detail_open:
-        st.title("Review queue")
-        st.caption("Synthetic plans only. Prioritise attention, not people; changes may be entirely legitimate.")
-        st.toggle("Demonstration scenarios", key="show_demos",
-                  help="Nine fictional examples, separate from model fitting and evaluation. Reset filters if needed.")
-    if st.session_state["show_demos"]:
+        st.title("Plans to review")
+        st.caption("Choose a plan, see what changed, and decide the next human action. Fictional demonstration only.")
+    collection = st.session_state["collection"]
+    if collection != "Evaluation holdout":
         selected_records, queue = load_scenarios()
-        cohort = "Demonstration scenarios"
+        if collection == COLLECTIONS[0]:
+            selected_records = selected_records[selected_records.plan_id.isin(PRESENTATION_IDS)]
+            queue = queue[queue.plan_id.isin(PRESENTATION_IDS)]
     else:
         selected_records, queue = split.test, evaluation_queue
-        cohort = "Evaluation holdout"
-    if navigation == "Review queue" and not detail_open:
-        if st.session_state["show_demos"]:
-            st.info("Demonstration scenarios: no outcome labels. Never used for fitting or evaluation.",
-                    icon=":material/science:")
-        with st.container(horizontal=True, vertical_alignment="bottom"):
-            st.text_input("Search plans", placeholder="Fictional ID, service or review reason", key="search",
-                          help="Literal phrase search across IDs, specialty, department and both methods' actual reasons.")
-            st.selectbox("Order by", list(ORDER_LABELS), key="order",
-                         help="Changes the ordering and displayed category source. Separate methods, never a blend.")
-        with st.expander("Filter plans"):
-            for key, label in (("specialties", "Service"), ("patterns", "Working pattern"), ("stages", "Workflow stage")):
-                st.multiselect(label, st.session_state["filter_choices"][key], key=key)
-        st.button("Reset filters & search", key="reset_filters", on_click=reset_review_filters, args=(queue,),
-                  help="Clear search and category filters, restore rules ordering and close detail. "
-                       "Keeps the collection and experimental budget. Never changes the source or scenario.")
-    config = current_config()
+    config = current_config(reviewer=True)
     view = filtered_queue(queue, config)
     ranked = view[view["baseline_index"].notna()]
     needs_triage = view[view["baseline_index"].isna()]
@@ -658,30 +639,65 @@ def main() -> None:
         st.session_state["selected_plan"] = None
         if detail_open and navigation == "Review queue":
             st.rerun()
-    signals = model_signals(view)
-    if navigation == "Rules vs ML":
-        st.title("Rules vs ML · synthetic-only evaluation")
-        st.caption("For Product and evaluation, not an automated review decision.")
-        budget = int(st.number_input("Review budget K", min_value=1, max_value=500, step=1, key="budget",
-                                     help="Compare methods at a fixed review capacity; not a policy target."))
-        st.info("No blended score: the two indices have different meanings. "
-                "Overlap and disagreement show where their selections differ without merging them.",
-                icon=":material/compare_arrows:")
-        display_evidence(split, model, evaluation_queue, budget)
-        with st.expander("Service-level review workload"):
-            display_patterns(view, config.source, st.session_state["order"])
+    if navigation == "Experiment results":
+        st.title("Experiment results")
+        st.subheader("Synthetic-only comparison: does ML add value beyond rules?")
+        budget = st.session_state["budget"]
+        results = compare_methods(evaluation_queue, split.test.set_index("plan_id")["material_amendment"], budget)
+        st.table(results[["method", "reviewed", "amendments_found"]].rename(columns={
+            "method": "Approach", "reviewed": "Plans reviewed", "amendments_found": "Synthetic amendments found",
+        }).set_index("Approach"))
+        st.write("This experiment predicts synthetic amendments, not which plans a clinician would review earlier. "
+                 "It is not real-world validation or evidence of time saved.")
+        st.caption("The three presentation examples are excluded from fitting and evaluation.")
+        with st.expander("Evidence and experiment settings"):
+            budget = int(st.number_input("Review budget K", min_value=1, max_value=500, step=1, key="budget"))
+            st.info("No blended score: inspect agreement and disagreement rather than merging different indices.")
+            display_evidence(split, model, evaluation_queue, budget)
+        with st.expander("Demo settings and full plan collections"):
+            st.selectbox("Queue collection", COLLECTIONS, key="collection", on_change=change_collection)
+            st.caption("These settings change the available plans, not the benchmark. The review queue stays rules-led.")
+            st.text_input("Search plans", key="search", placeholder="Fictional ID, service or reason")
+            for key, label in (("specialties", "Service"), ("patterns", "Working pattern"), ("stages", "Workflow stage")):
+                st.multiselect(label, st.session_state["filter_choices"][key], key=key)
+            st.selectbox("Priority filter", list(PRIORITY_FILTERS), key="priority_filter")
+            st.selectbox("Analysis order", list(ORDER_LABELS), key="order",
+                         help="Applies to the analysis view and export only, not the review queue. "
+                              "Priority filtering uses the selected method for this analysis.")
+            st.button("Reset filters & search", key="reset_filters", on_click=reset_review_filters, args=(queue,))
+            st.button("Reset presentation demo", key="reset_demo", on_click=reset_demo)
+        analysis_config = current_config()
+        analysis = filtered_queue(queue, analysis_config)
+        with st.expander("Inspect a plan, rule evidence or what-if"):
+            ids = analysis.plan_id.tolist()
+            if ids:
+                if st.session_state.get("inspection_plan") not in ids:
+                    st.session_state["inspection_plan"] = ids[0]
+                plan_id = st.selectbox("Plan to inspect", ids, key="inspection_plan")
+                record = selected_records.loc[selected_records.plan_id == plan_id].iloc[0].to_dict()
+                st.text(review_reason(record, assess_rules(record).export_traces()))
+                if st.button("Inspect rules and model evidence", key="analysis_evidence"):
+                    display_explanation(record, model, model_signals(analysis)[plan_id])
+                display_what_if(record, model)
+            else:
+                st.info("No plans match the analysis filters. Reset filters & search to inspect a plan.")
+        with st.expander("Analysis queue and service workload"):
+            st.dataframe(analysis[["plan_id", "specialty", "baseline_index", "model_index", "data_quality_state"]],
+                         hide_index=True, width="stretch")
+            display_patterns(analysis, analysis_config.source, st.session_state["order"])
         with st.expander("Export current original-plan view"):
             st.caption(markdown_text(
-                f"Collection: {cohort} · Order: {st.session_state['order']} · "
-                f"Category filter: {st.session_state['priority_filter']} · Search: {config.search or '(none)'}"
+                f"Collection: {collection} · Analysis order: {st.session_state['order']} · "
+                f"Category filter: {st.session_state['priority_filter']} · Search: {analysis_config.search or '(none)'}"
             ))
             st.caption(
-                f"{len(ranked)} scored and {len(needs_triage)} unscored original plans; both scores/categories, exact "
+                f"{analysis.baseline_index.notna().sum()} scored and {analysis.baseline_index.isna().sum()} "
+                "unscored original plans; both scores/categories, exact "
                 "contributions, actions and input sufficiency included. No what-if edits or outcome labels; not limited to K. "
                 "Unavailable JSON values are null. CSV has one scope record then plan records (record_type=plan); "
                 "potential spreadsheet-formula text is apostrophe-prefixed. Exports stay local to your browser."
             )
-            payload = export_payload(queue, config, model)
+            payload = export_payload(queue, analysis_config, model)
             st.download_button("Download filtered queue CSV", export_csv(payload, list(queue.columns)),
                                file_name="synthetic-review-queue.csv", mime="text/csv", key="export_csv")
             st.download_button("Download filtered queue JSON", export_json(payload),
@@ -690,41 +706,27 @@ def main() -> None:
     selected = st.session_state.get("selected_plan")
     if selected is not None:
         record = selected_records.loc[selected_records["plan_id"] == selected].iloc[0].to_dict()
-        display_detail(record, model, config.source, signals[selected])
+        display_detail(record, model)
         return
-    all_priorities = filtered_queue(queue, current_config(all_priorities=True))
-    categories = all_priorities[f"{config.source}_category"]
-    counts = {
-        "Review sooner": int(categories.eq("High").sum()),
-        "Standard review": int(categories.isin(["Low", "Medium"]).sum()),
-        "Data clarification required": int(all_priorities["baseline_index"].isna().sum()),
-    }
-    with st.container(horizontal=True):
-        for label, count in counts.items():
-            st.button(f"{label} · {count}", key="summary_" + label,
-                      icon=":material/info:" if label == "Data clarification required" else ":material/checklist:",
-                      type="primary" if st.session_state["priority_filter"] == label else "secondary",
-                      on_click=change_priority_filter, args=(label,))
-    st.caption(
-        f"{len(view)} plans in view · {cohort} · Filter: {st.session_state['priority_filter']}. "
-        "Counts reflect search and service filters before category filtering; select a count again to show all."
-    )
-    st.caption(
-        "Data clarification always stays visible in its own section. 'Rules apply' includes partial change signals. "
-        "Model signal compares with all eligible plans in this filtered view, not just this page."
-    )
-    if ranked.empty:
-        st.info("No scored plans match this view. Reset filters & search, or inspect Data clarification below.")
+    st.text(f"{len(view)} plans · {view.baseline_category.eq('High').sum()} review sooner · "
+            f"{len(needs_triage)} need data clarification")
+    if collection != COLLECTIONS[0] or set(view.plan_id) != set(PRESENTATION_IDS):
+        st.caption("Custom view from Experiment results → Demo settings.")
+        st.button("Reset presentation demo", key="reset_demo", on_click=reset_demo)
+    if view.empty:
+        st.info("No plans match the current settings. Reset presentation demo to restore the three examples.")
+    elif collection == COLLECTIONS[0]:
+        display_cards(view, selected_records)
     else:
-        display_cards(ranked, selected_records, config.source, signals)
-    st.subheader("Data clarification required")
-    st.caption("These plans need information, not a lower priority. Opening an item sends no request and records no decision.")
-    display_cards(needs_triage, selected_records, config.source, signals, triage=True)
+        display_cards(ranked, selected_records)
+        if not needs_triage.empty:
+            st.subheader("Data clarification")
+            display_cards(needs_triage, selected_records, triage=True)
 
 
 def initialise_view(evaluation: pd.DataFrame, demonstration: pd.DataFrame) -> None:
     defaults = {
-        "search": "", "order": "Rules-led", "priority_filter": "All plans", "show_demos": False,
+        "search": "", "order": "Rules-led", "priority_filter": "All plans", "collection": COLLECTIONS[0],
         "budget": DEFAULT_REVIEW_BUDGET, "selected_plan": None,
     }
     choices = {}
@@ -737,9 +739,9 @@ def initialise_view(evaluation: pd.DataFrame, demonstration: pd.DataFrame) -> No
         st.session_state[key] = st.session_state.get(key, default)
 
 
-def current_config(*, all_priorities: bool = False) -> ViewConfig:
+def current_config(*, all_priorities: bool = False, reviewer: bool = False) -> ViewConfig:
     return ViewConfig(
-        ORDER_LABELS[st.session_state["order"]],
+        "Rules baseline" if reviewer else ORDER_LABELS[st.session_state["order"]],
         tuple(st.session_state["specialties"]), tuple(st.session_state["patterns"]), tuple(st.session_state["stages"]),
         PRIORITY_FILTERS["All plans" if all_priorities else st.session_state["priority_filter"]],
         st.session_state["search"],
