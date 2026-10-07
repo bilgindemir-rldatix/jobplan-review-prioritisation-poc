@@ -1,5 +1,5 @@
 from pathlib import Path
-import tomllib
+import re
 
 import pytest
 
@@ -12,260 +12,251 @@ def start_app():
     return testing.AppTest.from_file(str(ROOT / "app.py"), default_timeout=60).run()
 
 
-def queue_frames(app):
-    return [item.value.copy(deep=True) for item in app.dataframe if "Viewing" in item.value.columns]
+def navigate(app, page):
+    app.radio(key="navigation").set_value(page).run()
+    assert not app.exception
 
 
 def benchmark(app):
     return next(item.value for item in app.dataframe if "amendments_found" in item.value.columns)
 
 
-def test_workspace_identity_selection_search_empty_and_secondary_navigation():
+def content(app):
+    return " ".join(item.value for kind in ("title", "subheader", "caption", "markdown", "text", "info", "warning")
+                    for item in getattr(app, kind))
+
+
+def plan_buttons(app):
+    return [item for item in app.button if item.key and item.key.startswith("view_")]
+
+
+def back(app):
+    next(item for item in app.button if item.label == "Back to queue").click().run()
+    assert not app.exception
+
+
+def test_navigation_reason_first_queue_and_no_technical_indices():
     app = start_app()
     assert not app.exception
-    assert app.header[0].value == "JobPlan review workspace"
-    assert any("clinical-workspace-v6" in item.value for item in app.caption)
-    assert any("Synthetic demo only" in item.value for item in app.caption)
-    assert not app.metric
-    assert [tab.label for tab in app.tabs] == [
-        "Overview", "Review workspace", "Review patterns", "Evidence & export", "About this initiative",
+    assert app.title[0].value == "Review queue"
+    assert app.sidebar.title[0].value == "JobPlan review"
+    assert any(item.value == "Review queue" for item in app.title)
+    assert app.radio(key="navigation").options == ["Review queue", "Rules vs ML", "About this POC"]
+    assert app.radio(key="navigation").value == "Review queue"
+    assert not app.tabs and not app.metric
+    assert "clinical-workspace-v7" in content(app)
+    assert not any("Build:" in item.value for item in app.title)
+    assert app.selectbox(key="order").value == "Rules-led"
+    assert [item.label for item in app.button if item.key.startswith("summary_")] == [
+        "Review sooner · 0", "Standard review · 128", "Data clarification required · 5",
     ]
-    assert len(app.get("column")) == 2
-    assert any("**133** plans" in item.value and "**128** scored" in item.value for item in app.markdown)
-    assert len(app.get("download_button")) == 2
-    alternative = app.selectbox(key="selected_plan").options[1]
-    app.text_input(key="search").set_value(alternative.lower()).run()
+    assert not app.number_input  # Budget is not part of the reviewer rail.
+    assert not app.dataframe
+    assert len(plan_buttons(app)) == 13  # Eight scored cards and five separate clarification cards.
+    assert any("changed from the previous plan" in item.value for item in app.markdown)
+    assert not re.search(r"R-0[1-5]|/100|/ 100|Unscored|Rules index|ML index", content(app))
+    assert "higher than most plans" in content(app) or "lower than most plans" in content(app)
+
+
+def test_search_empty_reset_and_selection_consistency():
+    app = start_app()
+    initial = [item.key for item in plan_buttons(app)]
+    selected = plan_buttons(app)[1].key.removeprefix("view_")
+    app.text_input(key="search").set_value(selected.lower()).run()
+    assert [item.key for item in plan_buttons(app)] == ["view_" + selected]
+    app.button(key="view_" + selected).click().run()
     assert not app.exception
-    assert app.selectbox(key="selected_plan").value == alternative
-    assert app.selectbox(key="selected_plan").options == [alternative]
-    assert any(item.value == f"Plan {alternative}" for item in app.subheader)
-    selected = queue_frames(app)[0]
-    assert selected.loc[selected.Viewing, "plan_id"].tolist() == [alternative]
+    assert app.session_state["selected_plan"] == selected
+    assert any(f"JobPlan {selected}" in item.value.replace("\\", "") for item in app.title)
+    assert not app.text_input
+    navigate(app, "Rules vs ML")
+    assert benchmark(app).amendments_found.tolist()[:3] == [8, 6, 7]
+    navigate(app, "Review queue")
+    assert app.session_state["selected_plan"] == selected
+    back(app)
+    assert app.text_input(key="search").value == selected.lower()
     app.text_input(key="search").set_value("no-such-fictional-plan").run()
     assert not app.exception
-    assert not any(item.key == "selected_plan" for item in app.selectbox)
-    assert not any(item.value.startswith("Plan FIC-") for item in app.subheader)
-    assert any("No plan is selected" in item.value for item in app.info)
-    assert any("No workload groups" in item.value for item in app.info)
-    assert len(app.get("download_button")) == 2
-    assert benchmark(app).amendments_found.tolist()[:3] == [8, 6, 7]
-    app.text_input(key="search").set_value("").run()
+    assert not plan_buttons(app)
+    assert app.session_state["selected_plan"] is None
+    assert "Reset filters & search" in content(app)
+    app.button(key="reset_filters").click().run()
     assert not app.exception
-    retained = app.selectbox(key="selected_plan").options[2]
-    app.selectbox(key="selected_plan").select(retained).run()
-    assert len(app.tabs[2].dataframe) == 2
-    assert app.selectbox(key="selected_plan").value == retained
-    app.selectbox(key="ranking").select("Oldest-first").run()
-    assert not app.exception
-    assert app.selectbox(key="selected_plan").value == retained
-    app.checkbox(key="stacked").check().run()
-    assert not app.exception
-    assert not app.get("column")
-    assert any(item.value == f"Plan {retained}" for item in app.subheader)
-    app.multiselect(key="specialties").set_value([]).run()
-    assert not app.exception
-    assert any("No scored plans" in item.value for item in app.info)
+    assert [item.key for item in plan_buttons(app)] == initial
+    assert app.selectbox(key="order").value == "Rules-led"
 
 
-def test_what_if_isolation_completeness_and_secondary_downloads():
+def test_category_filters_and_separate_missing_data_actions():
     app = start_app()
+    app.button(key="summary_Data clarification required").click().run()
     assert not app.exception
-    selected_plan = app.selectbox(key="selected_plan").value
-    before = queue_frames(app)
-    assert any("Recorded completeness" in item.value and "NOT model confidence" in item.value for item in app.caption)
-    patterns_before = [item.value.copy(deep=True) for item in app.tabs[2].dataframe]
+    assert len(plan_buttons(app)) == 5
+    assert all(item.label == "Request data clarification" for item in plan_buttons(app))
+    assert "previous plan unavailable" in content(app)
+    assert "Information available: 6 of 7 required items" in content(app)
+    assert "Unscored" not in content(app)
+    plan_buttons(app)[0].click().run()
+    assert not app.exception
+    assert "Data clarification required" in content(app)
+    assert "Priority cannot be reliably calculated" in content(app)
+    assert "Comparison withheld" in content(app)
+    assert not any(item.label == "Score isolated scenario" for item in app.button)
+    assert "Suggested review priority: Data clarification required" in content(app)
+    back(app)
+    app.button(key="summary_Data clarification required").click().run()
+    assert len(plan_buttons(app)) == 13
+    app.button(key="summary_Review sooner").click().run()
+    assert len(plan_buttons(app)) == 5  # Priority never conceals matching clarification records.
+
+
+def test_scenario_detail_comparison_dialog_and_reviewer_control():
+    app = start_app()
+    app.toggle(key="show_demos").set_value(True).run()
+    assert not app.exception
+    assert len(plan_buttons(app)) == 9
+    app.button(key="view_JP-003").click().run()
+    assert not app.exception
+    assert "Suggested review priority: Standard review" in content(app)
+    assert "DCC allocation" in content(app) and "-3.50" in content(app).replace("\\", "")
+    assert "This may be entirely legitimate" in content(app)
+    assert "The decision remains with the authorised reviewer" in content(app)
+    assert app.radio(key="consideration-JP-003").value is None
+    assert any(item.label == "Compare versions" for item in app.expander)
+    assert any("Change" in item.value.columns for item in app.table)
+    app.button(key="why_highlighted").click().run()
+    assert not app.exception
+    assert "Why this plan appeared" in content(app)
+    assert "Rule details" in content(app) and "Experimental model" in content(app)
+    labels = [item.label for item in app.expander]
+    assert any(label.startswith("R-01") for label in labels)
+    assert "View model details" in labels
+    assert "not index or probability contributions" in content(app)
+    assert "training-mean" in content(app)
+    assert len(app.json) == 5
+    app.button(key="close_explanation").click().run()
+    assert not app.exception
+    assert not app.json
+    back(app)
+    app.toggle(key="show_demos").set_value(False).run()
+    assert not app.exception
+    assert all(item.key.startswith("view_FIC-") for item in plan_buttons(app))
+    assert app.session_state["selected_plan"] is None
+
+
+def test_what_if_does_not_change_exports_cohort_or_benchmark():
+    app = start_app()
+    navigate(app, "Rules vs ML")
     evidence_before = benchmark(app).copy(deep=True)
     downloads_before = [item.proto.url for item in app.get("download_button")]
-    assert app.selectbox(key="selected_plan").value == selected_plan
-    app.slider[0].set_value(100.0)
-    next(button for button in app.button if button.label == "Score isolated scenario").click().run()
+    navigate(app, "Review queue")
+    before = [item.key for item in plan_buttons(app)]
+    plan_buttons(app)[0].click().run()
     assert not app.exception
-    assert any("Scenario rules baseline:" in item.value for item in app.markdown)
-    for actual, expected in zip(queue_frames(app), before):
-        assert actual.equals(expected)
-    for actual, expected in zip(app.tabs[2].dataframe, patterns_before):
-        assert actual.value.equals(expected)
+    app.slider[0].set_value(100.0)
+    next(item for item in app.button if item.label == "Score isolated scenario").click().run()
+    assert not app.exception
+    assert "Scenario rules baseline:" in content(app)
+    navigate(app, "Rules vs ML")
     assert benchmark(app).equals(evidence_before)
     assert [item.proto.url for item in app.get("download_button")] == downloads_before
+    navigate(app, "Review queue")
+    back(app)
+    assert [item.key for item in plan_buttons(app)] == before
 
 
-def test_unscored_detail_and_compact_priority_indicators():
-    from jobplan_poc.synthetic import generate_plans
-    from jobplan_poc.evaluation import temporal_split
-
-    records = temporal_split(generate_plans()).test
-    plan_id = records.loc[records["previous_total_pa"].isna(), "plan_id"].iloc[0]
+def test_about_content_fixed_benchmark_and_filter_state_across_pages():
     app = start_app()
-    app.multiselect(key="priorities").set_value([]).run()
-    assert not app.exception
-    assert any("**5** plans" in item.value and "**0** scored" in item.value for item in app.markdown)
-    app.selectbox(key="selected_plan").select(plan_id).run()
-    assert not app.exception
-    assert any("Data clarification required" in item.value for item in app.warning)
-    assert not any(button.label == "Score isolated scenario" for button in app.button)
-    app.text_input(key="search").set_value(plan_id).run()
-    assert not app.exception
-    assert app.selectbox(key="selected_plan").options == [plan_id]
-    triage = queue_frames(app)[0]
-    assert triage.loc[triage.Viewing, "plan_id"].tolist() == [plan_id]
-    assert "completeness_percent" in triage.columns
-    assert any("Unscored" in item.value and "Rules index" in item.value for item in app.markdown)
-
-
-def test_table_selection_callback_is_bound_to_displayed_ids(monkeypatch):
-    from jobplan_poc import dashboard
-
-    state = {"queue-1": {"selection": {"rows": [1]}}, "selected_plan": "A"}
-    monkeypatch.setattr(dashboard.st, "session_state", state)
-    dashboard.select_table_plan("queue-1", ["C", "B", "A"])
-    assert state["selected_plan"] == "B"
-    state["queue-1"]["selection"]["rows"] = []
-    dashboard.select_table_plan("queue-1", ["C", "B", "A"])
-    assert state["selected_plan"] == "B"
-
-
-def test_light_theme_readable_contrast():
-    theme = tomllib.loads((ROOT / ".streamlit" / "config.toml").read_text())["theme"]
-    assert theme["base"] == "light"
-
-    def luminance(colour):
-        rgb = [int(colour[index:index + 2], 16) / 255 for index in (1, 3, 5)]
-        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in rgb]
-        return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
-
-    for foreground, background in [
-        (theme["textColor"], theme["backgroundColor"]),
-        (theme["textColor"], theme["secondaryBackgroundColor"]),
-        (theme["primaryColor"], theme["backgroundColor"]),
-    ]:
-        values = sorted([luminance(foreground), luminance(background)])
-        assert (values[1] + 0.05) / (values[0] + 0.05) >= 4.5
-
-
-def test_reset_filters_search_and_selection_without_changing_model_or_budget():
-    app = start_app()
-    initial_frames = queue_frames(app)
-    initial_evidence = benchmark(app).copy(deep=True)
-    initial_downloads = [item.proto.url for item in app.get("download_button")]
-    initial_plan = app.selectbox(key="selected_plan").value
-    app.multiselect(key="specialties").set_value(["Radiology"])
-    app.multiselect(key="patterns").set_value(["Full-time"])
-    app.multiselect(key="stages").set_value(["Draft"])
-    app.multiselect(key="priorities").set_value(["High"])
-    app.selectbox(key="ranking").select("Rules baseline")
     app.text_input(key="search").set_value("no-such-plan").run()
-    assert not app.exception
-    assert not any(item.key == "selected_plan" for item in app.selectbox)
-    assert any("Reset filters & search" in item.value for item in app.info)
-    app.button(key="reset_filters").click().run()
-    assert not app.exception
-    assert app.text_input(key="search").value == ""
-    assert app.selectbox(key="ranking").value == "Rules baseline"
-    for key in ("specialties", "patterns", "stages", "priorities"):
-        widget = app.multiselect(key=key)
-        assert set(widget.value) == set(widget.options)
-    assert app.selectbox(key="selected_plan").value == initial_plan
-    for actual, expected in zip(queue_frames(app), initial_frames):
-        assert actual.equals(expected)
-    assert benchmark(app).equals(initial_evidence)
-    assert [item.proto.url for item in app.get("download_button")] == initial_downloads
-    budget = next(item for item in app.number_input if item.label == "Review budget K")
-    budget.set_value(12)
-    app.checkbox(key="stacked").check()
-    app.text_input(key="search").set_value("no-such-plan").run()
-    app.button(key="reset_filters").click().run()
-    assert not app.exception
-    assert next(item for item in app.number_input if item.label == "Review budget K").value == 12
-    assert app.checkbox(key="stacked").value is True
-
-
-def test_initiative_content_and_fixed_default_benchmark():
-    app = start_app()
-    initiative = app.tabs[4]
-    content = " ".join(item.value for item in [*initiative.markdown, *initiative.caption])
+    navigate(app, "Rules vs ML")
+    app.number_input(key="budget").set_value(12).run()
+    assert benchmark(app).reviewed.tolist() == [12] * 5
+    assert "No workload groups" in content(app)
+    navigate(app, "About this POC")
+    text = content(app)
     for expected in (
-        "finite review time", "value", "not proven time savings", "No live eJobPlan integration",
+        "finite review time", "not proven time savings", "No live eJobPlan integration",
         "automatic approval/rejection", "ML has not demonstrated an advantage",
         "independently reviewed outcome", "information governance", "subgroup",
         "review time and usability", "Shadow mode is proposed, NOT implemented",
+        "SYNTHETIC AMENDMENT", "seven grouped requirements", "Review sooner", "Medium and Low",
     ):
-        assert expected in content
-    default = next(item.value for item in initiative.dataframe if "amendments_found" in item.value.columns)
-    assert default.reviewed.tolist() == [30, 30, 30]
-    assert default.amendments_found.tolist() == [8, 6, 7]
-    next(item for item in app.number_input if item.label == "Review budget K").set_value(12)
-    app.text_input(key="search").set_value("no-such-plan").run()
+        assert expected in text
+    assert benchmark(app).amendments_found.tolist() == [8, 6, 7]
+    assert benchmark(app).reviewed.eq(30).all()
+    navigate(app, "Review queue")
+    assert app.text_input(key="search").value == "no-such-plan"
+    app.button(key="reset_filters").click().run()
+    navigate(app, "Rules vs ML")
+    assert app.number_input(key="budget").value == 12
+    assert benchmark(app).reviewed.eq(12).all()
+
+
+def test_experiment_disagreements_model_summary_and_no_blending():
+    app = start_app()
+    app.toggle(key="show_demos").set_value(True).run()
+    app.text_input(key="search").set_value("JP-005").run()
+    navigate(app, "Rules vs ML")
+    assert benchmark(app).amendments_found.tolist()[:3] == [8, 6, 7]
+    assert "No blended score" in content(app)
+    disagreements = next(item.value for item in app.dataframe if "selected_by" in item.value.columns)
+    assert len(disagreements) == 44
+    assert disagreements.selected_by.value_counts().to_dict() == {"ML only at K": 22, "Rules only at K": 22}
+    assert "100 permutations" in content(app)
+    assert any("Mean absolute signed-term magnitude" in item.value.columns for item in app.table)
+    assert len(app.get("download_button")) == 2
+    app.number_input(key="budget").set_value(500).run()
     assert not app.exception
-    assert benchmark(app).reviewed.tolist() == [12] * 5
-    actual = next(item.value for item in app.tabs[4].dataframe if "amendments_found" in item.value.columns)
-    assert actual.equals(default)
+    assert "No top-K selection disagreements" in content(app)
+    assert benchmark(app).reviewed.eq(128).all()
 
 
-def test_reset_callback_only_changes_view_state(monkeypatch):
+def test_filter_callbacks_only_change_view_state(monkeypatch):
     from jobplan_poc import dashboard
     from jobplan_poc.synthetic import generate_plans
 
     queue = generate_plans(20)
     original = queue.copy(deep=True)
     state = {
-        "selected_plan": "old", "search": "old", "ranking": "Rules baseline",
-        "queue_signature": ("old",), "queue_revision": 4, "budget": 12,
-        "FIC-00001-completeness": 57.0, "stacked": True,
+        "selected_plan": "old", "search": "old", "order": "Experimental model",
+        "priority_filter": "Review sooner", "queue_page": 3, "budget": 12,
+        "FIC-00001-completeness": 57.0, "show_demos": True,
     }
     monkeypatch.setattr(dashboard.st, "session_state", state)
     dashboard.reset_review_filters(queue)
     assert queue.equals(original)
-    assert state["selected_plan"] is None
-    assert "queue_signature" not in state
-    assert state["queue_revision"] == 4
+    assert state["selected_plan"] is None and state["search"] == ""
+    assert state["queue_page"] == 0 and state["order"] == "Rules-led"
     assert state["FIC-00001-completeness"] == 57.0
-    assert state["budget"] == 12 and state["stacked"] is True
+    assert state["budget"] == 12 and state["show_demos"] is True
+    dashboard.open_detail("A")
+    assert state["selected_plan"] == "A"
+    dashboard.change_priority_filter("Standard review")
+    assert state["selected_plan"] is None and state["priority_filter"] == "Standard review"
 
 
-def test_linked_review_scenarios_trace_and_evaluation_isolation():
+def test_pagination_and_source_switch_clear_obsolete_selection():
     app = start_app()
-    assert app.selectbox(key="ranking").value == "Rules baseline"
-    evidence = benchmark(app).copy(deep=True)
-    assert any("Why highlighted?" in item.label for item in app.expander)
-    app.radio(key="cohort").set_value("Demonstration scenarios").run()
+    first = [item.key for item in plan_buttons(app) if item.label == "View JobPlan"]
+    app.button(key="queue_page_next").click().run()
     assert not app.exception
-    assert len(app.selectbox(key="selected_plan").options) == 9
-    assert any("Never used for fitting" in item.value for item in app.info)
-    app.selectbox(key="selected_plan").select("JP-003").run()
+    second = [item.key for item in plan_buttons(app) if item.label == "View JobPlan"]
+    assert not set(first) & set(second)
+    app.selectbox(key="order").set_value("Experimental model").run()
     assert not app.exception
-    assert benchmark(app).equals(evidence)
-    traces = next(item.value for item in app.dataframe if "rule_id" in item.value.columns)
-    assert traces.loc[traces.rule_id == "R-01", "points"].iloc[0] == 0
-    assert traces.loc[traces.rule_id == "R-04", "points"].iloc[0] == 15
-    activities = next(item.value for item in app.dataframe if "Activity" in item.value.columns)
-    assert activities["Current PA"].sum() == 5
-    assert activities["Previous PA"].sum() == 10
-    assert any("Prioritisation is not a decision" in item.value for item in app.caption)
-    for plan_id in ("JP-005", "JP-006", "JP-007"):
-        app.selectbox(key="selected_plan").select(plan_id).run()
-        assert not app.exception
-        assert any("Data clarification required" in item.value for item in app.warning)
-        assert any("Comparison withheld" in item.value for item in app.info)
-        traces = next(item.value for item in app.dataframe if "rule_id" in item.value.columns)
-        assert traces.state.eq("withheld").all()
-        assert traces.points.isna().all()
-        assert not any(item.label == "Score isolated scenario" for item in app.button)
-        assert benchmark(app).equals(evidence)
-    app.radio(key="cohort").set_value("Evaluation holdout").run()
+    assert app.session_state["queue_page"] == 0
+    app.multiselect(key="specialties").set_value([]).run()
     assert not app.exception
-    assert all(value.startswith("FIC-") for value in app.selectbox(key="selected_plan").options)
+    assert not plan_buttons(app) and app.session_state["selected_plan"] is None
+    app.button(key="reset_filters").click().run()
+    assert not app.exception
+    assert [item.key for item in plan_buttons(app) if item.label == "View JobPlan"] == first
 
 
-def test_experiment_disagreement_and_whole_cohort_ui():
+def test_only_static_theme_uses_unsafe_html():
     app = start_app()
+    unsafe = [item.value for item in app.markdown if item.proto.allow_html]
+    from jobplan_poc.theme import CSS
+    assert unsafe == ["<style>" + CSS + "</style>"]
+    app.text_input(key="search").set_value('<img src=x onerror="alert(1)">').run()
     assert not app.exception
-    evidence = app.tabs[3]
-    assert any("top-K overlap" in item.value for item in evidence.subheader)
-    comparisons = next(item.value for item in evidence.dataframe if "selected_by" in item.value.columns)
-    assert len(comparisons) == 44
-    assert comparisons.selected_by.value_counts().to_dict() == {"ML only at K": 22, "Rules only at K": 22}
-    assert any("100 permutations" in item.value for item in evidence.caption)
-    next(item for item in app.number_input if item.label == "Review budget K").set_value(500).run()
-    assert not app.exception
-    assert any("No top-K selection disagreements" in item.value for item in app.tabs[3].info)
-    assert benchmark(app).reviewed.eq(128).all()
+    assert [item.value for item in app.markdown if item.proto.allow_html] == unsafe
