@@ -8,11 +8,51 @@ not a separate AI product or a new microservice.
 **Prioritise attention, not people.**
 
 This is a Product + Architecture + UX + Data/ML presentation, not an integration
-specification verified against company source. No current JobPlan source,
-screens, schemas, APIs or customer data were inspected. Every description of a
-current product touchpoint below is **Requires validation against current
+specification. The POC repository contains no company source, schemas or data.
+A separate read-only architecture review of the product codebase informed the
+high-level findings in the "Verified architecture findings" section below; the
+detailed evidence is held outside this repository. Where a touchpoint is not
+covered by that summary it remains **Requires validation against current
 JobPlan implementation**. Endpoint names, flags and derived schemas are
 **proposals**, not existing contracts.
+
+## Verified architecture findings (high level, from a read-only review)
+
+These supersede the earlier unverified assumptions wherever they conflict.
+
+- **Stack:** React/TypeScript front end and a .NET API with relational storage,
+  a background-job worker and a distributed cache. The Python/Streamlit POC is
+  a design aid only; any product version would be rebuilt natively.
+- **Worklist shape:** the manager worklist is trust-scoped and paged, with one
+  row per clinician (latest plan only), not one row per plan. The POC's per-plan
+  queue and the wireframes below are therefore a simplification. Whether signals
+  attach to the clinician row or a plan view is an open product decision.
+- **Reusable sources:** plan-history snapshots with stable activity identifiers,
+  an existing changes report (activities added, modified, deleted) and
+  per-category PA value snapshots. These suit rules R-01 to R-03 and part of R-04.
+- **Differences from the POC data model:** there are many PA categories, not
+  three buckets; PA is computed and plan-level weekly PA may be absent; WTE is
+  not part of the plan model; the product has no review-due date, completeness
+  percentage or priority concept. Those POC features must not be assumed
+  to exist. Dates are date-only or server-local without a time zone, and
+  rounding depends on a per-plan setting.
+- **"Previous version" needs a product rule:** history rows are written by
+  event-driven jobs (a baseline plus per-editor-session updates), so the last
+  signed-off plan is not automatically the comparison point.
+- **POC gating limitation:** in this POC, any one missing administrative field
+  (workflow start, review due date or completeness) withholds all five rules,
+  although R-01 to R-05 only need plan-comparison data. A product version should
+  separate rule-input sufficiency from optional ML-feature sufficiency. The POC
+  engine has deliberately not been changed, so benchmark results stand.
+- **Smallest sensible prototype (not approved):** a flag-gated, read-only query
+  behind existing authorisation that picks a defined previous version and reuses
+  the changes report and category snapshots to return rule evidence as optional
+  worklist metadata and a small detail panel. Rules only: no ML, writes, new
+  service, cache or job until freshness needs are shown.
+- **Open blockers:** previous-version and amendment definitions; row semantics;
+  sufficiency of per-row authorisation for derived signals; sourcing of WTE,
+  site and unit; history-comparison performance at scale; the amendment target
+  and earlier-review rubric remain unvalidated.
 
 The running app's **Product integration** page demonstrates four representative
 screens: existing-style and enhanced worklist, existing-style and enhanced

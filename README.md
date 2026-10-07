@@ -11,6 +11,10 @@ what could be reused, proposed data/contracts/permissions/failure behaviour, and
 a conditional path to a pilot. **Product integration** is the new presentation
 landing page, with existing-style/enhanced worklist and detail wireframes.
 These are original fictional representations, not verified product screens.
+A later read-only architecture review found real differences (per-clinician
+worklist rows, many PA categories, no WTE or review-due date in the plan model,
+and a previous-version rule still to define); see
+[verified architecture findings](docs/product-integration.md#verified-architecture-findings-high-level-from-a-read-only-review).
 **Requires validation against current JobPlan implementation.**
 This repository remains a standalone POC, not the proposed production architecture.
 
