@@ -85,6 +85,7 @@ def score_queue(records: pd.DataFrame, model: ReviewModel) -> pd.DataFrame:
                 f"Total PA {record['previous_total_pa']:g} to {record['current_total_pa']:g}; "
                 f"WTE {record['previous_wte']:g} to {record['current_wte']:g}"
             ),
+            "scenario_name": record.get("scenario_name", ""),
         })
     return pd.DataFrame(rows, columns=[
         "plan_id", "specialty", "department", "working_pattern", "workflow_stage", "snapshot_date",
@@ -95,6 +96,7 @@ def score_queue(records: pd.DataFrame, model: ReviewModel) -> pd.DataFrame:
         "model_intercept", "model_decision", "baseline_explanation_space", "model_explanation_space",
         "legacy_baseline_index", "rule_traces", "rule_ids", "data_quality_state",
         "cohort", "generator_version", "generator_seed", "change_summary",
+        "scenario_name",
     ])
 
 

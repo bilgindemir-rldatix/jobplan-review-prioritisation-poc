@@ -24,7 +24,7 @@ def test_workspace_identity_selection_search_empty_and_secondary_navigation():
     app = start_app()
     assert not app.exception
     assert app.header[0].value == "JobPlan review workspace"
-    assert any("clinical-workspace-v5" in item.value for item in app.caption)
+    assert any("clinical-workspace-v6" in item.value for item in app.caption)
     assert any("Synthetic demo only" in item.value for item in app.caption)
     assert not app.metric
     assert [tab.label for tab in app.tabs] == [
@@ -101,7 +101,7 @@ def test_unscored_detail_and_compact_priority_indicators():
     assert any("**5** plans" in item.value and "**0** scored" in item.value for item in app.markdown)
     app.selectbox(key="selected_plan").select(plan_id).run()
     assert not app.exception
-    assert any("Insufficient required data" in item.value for item in app.warning)
+    assert any("Data clarification required" in item.value for item in app.warning)
     assert not any(button.label == "Score isolated scenario" for button in app.button)
     app.text_input(key="search").set_value(plan_id).run()
     assert not app.exception
@@ -160,7 +160,7 @@ def test_reset_filters_search_and_selection_without_changing_model_or_budget():
     app.button(key="reset_filters").click().run()
     assert not app.exception
     assert app.text_input(key="search").value == ""
-    assert app.selectbox(key="ranking").value == "Experimental ML"
+    assert app.selectbox(key="ranking").value == "Rules baseline"
     for key in ("specialties", "patterns", "stages", "priorities"):
         widget = app.multiselect(key=key)
         assert set(widget.value) == set(widget.options)
@@ -220,3 +220,37 @@ def test_reset_callback_only_changes_view_state(monkeypatch):
     assert state["queue_revision"] == 4
     assert state["FIC-00001-completeness"] == 57.0
     assert state["budget"] == 12 and state["stacked"] is True
+
+
+def test_linked_review_scenarios_trace_and_evaluation_isolation():
+    app = start_app()
+    assert app.selectbox(key="ranking").value == "Rules baseline"
+    evidence = benchmark(app).copy(deep=True)
+    assert any("Why highlighted?" in item.label for item in app.expander)
+    app.radio(key="cohort").set_value("Demonstration scenarios").run()
+    assert not app.exception
+    assert len(app.selectbox(key="selected_plan").options) == 9
+    assert any("Never used for fitting" in item.value for item in app.info)
+    app.selectbox(key="selected_plan").select("JP-003").run()
+    assert not app.exception
+    assert benchmark(app).equals(evidence)
+    traces = next(item.value for item in app.dataframe if "rule_id" in item.value.columns)
+    assert traces.loc[traces.rule_id == "R-01", "points"].iloc[0] == 0
+    assert traces.loc[traces.rule_id == "R-04", "points"].iloc[0] == 15
+    activities = next(item.value for item in app.dataframe if "Activity" in item.value.columns)
+    assert activities["Current PA"].sum() == 5
+    assert activities["Previous PA"].sum() == 10
+    assert any("Prioritisation is not a decision" in item.value for item in app.caption)
+    for plan_id in ("JP-005", "JP-006", "JP-007"):
+        app.selectbox(key="selected_plan").select(plan_id).run()
+        assert not app.exception
+        assert any("Data clarification required" in item.value for item in app.warning)
+        assert any("Comparison withheld" in item.value for item in app.info)
+        traces = next(item.value for item in app.dataframe if "rule_id" in item.value.columns)
+        assert traces.state.eq("withheld").all()
+        assert traces.points.isna().all()
+        assert not any(item.label == "Score isolated scenario" for item in app.button)
+        assert benchmark(app).equals(evidence)
+    app.radio(key="cohort").set_value("Evaluation holdout").run()
+    assert not app.exception
+    assert all(value.startswith("FIC-") for value in app.selectbox(key="selected_plan").options)

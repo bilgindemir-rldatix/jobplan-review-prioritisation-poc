@@ -7,6 +7,9 @@ import streamlit as st
 
 from jobplan_poc.evaluation import compare_methods, score_queue, temporal_split
 from jobplan_poc.features import FEATURE_LABELS, extract_features
+from jobplan_poc.dataset import demonstration_plans, generate_dataset
+from jobplan_poc.records import activity_comparison, validate_sources
+from jobplan_poc.rules import CATALOGUE, RULESET_VERSION, assess_rules
 from jobplan_poc.presentation import (
     ViewConfig, export_csv, export_json, export_payload, filtered_queue,
     priority_distribution, workload_groups,
@@ -15,18 +18,25 @@ from jobplan_poc.scoring import ReviewModel, Score, fit_model, score_baseline, w
 from jobplan_poc.synthetic import DEFAULT_SEED, REFERENCE_DATE, TEST_START, generate_plans
 
 
-BUILD_LABEL = "clinical-workspace-v5"
+BUILD_LABEL = "clinical-workspace-v6"
 DEFAULT_REVIEW_BUDGET = 30
 
 
 @st.cache_resource
 def load_demo():
-    """View schema v2: regenerate cached data after the tabbed-dashboard upgrade."""
-    records = generate_plans()
+    """Linked activity cohort v1; preserve the existing model experiment."""
+    records = generate_dataset()
     split = temporal_split(records)
     model = fit_model(split.training)
     queue = score_queue(split.test, model)
     return split, model, queue
+
+
+@st.cache_resource
+def load_scenarios():
+    _, model, _ = load_demo()
+    records = demonstration_plans()
+    return records, score_queue(records, model)
 
 
 def display_score(title: str, score: Score) -> None:
@@ -38,7 +48,7 @@ def display_score(title: str, score: Score) -> None:
         return
     st.caption(f"Largest absolute term: {score.main_driver}")
     contributions = pd.DataFrame([
-        {"Feature": FEATURE_LABELS[name], "Contribution": value}
+        {"Feature": FEATURE_LABELS.get(name, name), "Contribution": value}
         for name, value in sorted(score.contributions.items(), key=lambda item: abs(item[1]), reverse=True)
     ])
     st.dataframe(contributions, hide_index=True, width="stretch")
@@ -56,16 +66,17 @@ def display_score(title: str, score: Score) -> None:
 def display_detail(record: dict, model: ReviewModel, source: str) -> None:
     st.subheader(f"Plan {record['plan_id']}")
     st.caption(f"{record['specialty']} | {record['working_pattern']} | {record['workflow_stage']}")
-    baseline, ml = score_baseline(record), model.score(record)
+    assessment = assess_rules(record)
+    baseline, ml = assessment.score, model.score(record)
     selected_score = ml if source == "model" else baseline
     for label, score in [("Rules index", baseline), ("Experimental ML index", ml)]:
         value = "Unscored" if score.index is None else f"{score.index:.1f} / 100"
         st.markdown(f"**{label}** &nbsp; {value} &nbsp; | &nbsp; {score.category}")
-    st.caption("Separate review-priority indices, not a clinical probability. Low does not mean no review needed.")
+    st.caption("Prioritisation is not a decision. Separate review-priority indices, not a clinical probability.")
     st.markdown("**Next human action**")
     st.write(selected_score.action)
     if selected_score.errors:
-        st.warning("Insufficient required data - unscored, not Low.")
+        st.warning("Data clarification required. Priority cannot be reliably calculated - unscored, not Low.")
         for error in selected_score.errors:
             st.text(error)
     else:
@@ -75,6 +86,8 @@ def display_detail(record: dict, model: ReviewModel, source: str) -> None:
         f"Recorded completeness: {record['completeness_percent']:.1f}% | {selected_score.sufficiency}. "
         "Data completeness is NOT model confidence."
     )
+    if record.get("cohort") == "demonstration":
+        st.info(f"Demonstration only: {record['scenario_name']}. {record['scenario_note']}")
     st.caption(
         f"Snapshot {record['snapshot_date']:%d %b %Y} | Illustrative review due {record['review_due_date']:%d %b %Y}"
     )
@@ -89,13 +102,41 @@ def display_detail(record: dict, model: ReviewModel, source: str) -> None:
         ]
     ])
     comparison["Change"] = comparison["Current"] - comparison["Previous"]
-    with st.expander("Previous / current plan", expanded=True):
-        st.dataframe(comparison, hide_index=True, width="stretch",
-                     column_config={name: st.column_config.NumberColumn(format="%.2f")
-                                    for name in ("Previous", "Current", "Change")})
-        st.caption("WTE = whole-time equivalent; PA = programmed activities. Legitimate variation is not poor performance.")
+    with st.expander("Previous / current activities and working pattern", expanded=True):
+        source = validate_sources(record)
+        if source.errors:
+            st.info("Comparison withheld until the missing or contradictory source information is clarified. "
+                    "No missing activity is assumed to have zero allocation.")
+        else:
+            st.dataframe(comparison, hide_index=True, width="stretch",
+                         column_config={name: st.column_config.NumberColumn(format="%.2f")
+                                        for name in ("Previous", "Current", "Change")})
+            st.dataframe(activity_comparison(record), hide_index=True, width="stretch")
+            st.dataframe(pd.DataFrame([
+                {"Version": prefix.capitalize(), "WTE": version["wte"],
+                 "Days / sessions": ", ".join(version["working_pattern"])}
+                for prefix, version in record["versions"].items()
+            ]), hide_index=True, width="stretch")
+        st.caption("Totals are derived from linked activities and checked against reported totals. "
+                   "DCC / SPA / Other are illustrative categories; WTE and PA are not performance measures.")
     features = extract_features(record)
-    with st.expander("Score breakdown & input context"):
+    triggered = [f"{trace.rule_id} {trace.name}" for trace in assessment.traces if trace.triggered]
+    st.caption("Full-signal rule thresholds reached: " + (", ".join(triggered) if triggered else "None; see any partial signals below."))
+    with st.expander("Why highlighted? Exact rule evidence and separate model contributions"):
+        st.markdown(f"**Activity-change rules ({RULESET_VERSION})**")
+        st.caption("Illustrative configurable POC thresholds, not NHS policy. Signal = min(observed / threshold, 1); "
+                   "points = weight × signal. Partial changes also contribute; triggered means the full-signal threshold is reached.")
+        st.dataframe(pd.DataFrame(assessment.export_traces()), hide_index=True, width="stretch",
+                     column_config={
+                         "rule_id": "Rule ID", "version": "Version", "name": "Rule", "rationale": "Rationale",
+                         "observed_difference": "Observed difference", "threshold": "Full-signal threshold",
+                         "signal_strength": "Signal strength", "weight": "Maximum points", "points": "Index points",
+                         "state": "Calculation state", "previous": "Previous inputs", "current": "Current inputs",
+                         "explanation": "Explanation", "unit": "Unit", "triggered": "Threshold reached",
+                     })
+        st.caption("All five rules are withheld if required inputs are unreliable; this is not a zero signal.")
+        with st.expander("Exact machine-readable trace"):
+            st.json(assessment.export_traces())
         st.caption(f"Department: {record['department']}. Each entity has one pre-review row; previous values are context.")
         if features.values is not None:
             st.dataframe(
@@ -103,7 +144,7 @@ def display_detail(record: dict, model: ReviewModel, source: str) -> None:
                               for key, value in features.values.items()]),
                 hide_index=True, width="stretch",
             )
-        display_score("Rules baseline", baseline)
+        display_score("Activity-change rules", baseline)
         display_score("Experimental learned model", ml)
         st.caption(
             "Illustrative boundaries: Low < 35; Medium 35 to < 65; High 65 to 100, using unrounded values. "
@@ -211,15 +252,16 @@ def reset_review_filters(queue: pd.DataFrame) -> None:
         st.session_state[state_key] = sorted(queue[column].unique())
     st.session_state["priorities"] = ["High", "Medium", "Low"]
     st.session_state["search"] = ""
-    st.session_state["ranking"] = "Experimental ML"
+    st.session_state["ranking"] = "Rules baseline"
     st.session_state["selected_plan"] = None
     st.session_state.pop("queue_signature", None)
 
 
 def display_queue_table(records: pd.DataFrame, source: str, table_key: str, *, triage: bool = False) -> None:
     plan_ids = records["plan_id"].tolist()
-    fields = (["plan_id", "completeness_percent"] if triage else
-              ["plan_id", f"{source}_category", "baseline_index", "model_index"])
+    fields = (["plan_id", "specialty", "completeness_percent", "data_quality_state"] if triage else
+              ["plan_id", "specialty", f"{source}_category", "baseline_index", "model_index",
+               "change_summary", f"{source}_main_driver", "data_quality_state"])
     display = records[fields].copy()
     display.insert(0, "Viewing", display["plan_id"] == st.session_state.get("selected_plan"))
     st.dataframe(
@@ -229,7 +271,10 @@ def display_queue_table(records: pd.DataFrame, source: str, table_key: str, *, t
         column_config={
             "Viewing": st.column_config.CheckboxColumn("Viewing", width="small"),
             "plan_id": st.column_config.TextColumn("Plan", width="small"),
-            "specialty": st.column_config.TextColumn("Specialty"),
+            "specialty": st.column_config.TextColumn("Service / specialty"),
+            "change_summary": st.column_config.TextColumn("Change summary"),
+            f"{source}_main_driver": st.column_config.TextColumn("Main review reason"),
+            "data_quality_state": st.column_config.TextColumn("Data quality"),
             f"{source}_category": st.column_config.TextColumn("Priority"),
             "baseline_index": st.column_config.NumberColumn(
                 "Rules /100", format="%.1f", width="small",
@@ -290,12 +335,22 @@ def display_initiative(split, queue: pd.DataFrame) -> None:
     )
     st.markdown("**How it works**")
     st.write(
-        "Pre-review plan signals → separate rules and experimental model indices → "
+        "Linked pre-review activities and working pattern → separate rules and experimental model indices → "
         "a ranked queue with faithful reasons → authorised human judgement."
     )
     st.caption(
         "Signals include activity changes, workflow age, review due dates and completeness. "
         "The two indices are never blended; neither measures clinical safety or clinician performance."
+    )
+    st.info(
+        "Prioritise attention, not people. Highlight change or uncertainty, not wrongdoing. "
+        "H1 tests workflow; H2 explanation understanding; H3 rules usefulness; H4 incremental ML value. "
+        "These hypotheses have not been validated by a clinician study."
+    )
+    st.caption(
+        "The current ML target is a SYNTHETIC AMENDMENT outcome, not 'a reviewer would prioritise earlier'. "
+        "An independently reviewed earlier-review rubric is proposed, not implemented. "
+        "See docs/poc-definition.md and the unexecuted walkthrough protocol for the research plan."
     )
     st.markdown("**Available now / proposed later**")
     st.dataframe(pd.DataFrame([
@@ -367,16 +422,23 @@ def main() -> None:
     st.set_page_config(page_title="JobPlan | Review workspace", layout="wide")
     st.header("JobPlan review workspace")
     st.caption(f"Clinical Director review support | Build: {BUILD_LABEL}")
-    st.caption("Synthetic demo only. Supports human review, not clinician performance assessment or clinical safety prediction.")
+    st.caption("Synthetic demo only. Prioritise attention, not people. Highlight change or uncertainty, not wrongdoing.")
     try:
-        split, model, queue = load_demo()
+        split, model, evaluation_queue = load_demo()
     except ValueError as exc:
         st.error(f"Demo cannot be scored: {exc}")
         st.stop()
 
     st.sidebar.subheader("Review view")
+    cohort = st.sidebar.radio("Plan collection", ["Evaluation holdout", "Demonstration scenarios"], key="cohort")
+    if cohort == "Demonstration scenarios":
+        selected_records, queue = load_scenarios()
+        st.info("Demonstration scenarios: fixed fictional examples, no outcome labels. "
+                "Never used for fitting or benchmark evaluation. Evidence always uses the evaluation holdout.")
+    else:
+        selected_records, queue = split.test, evaluation_queue
     ranking = st.sidebar.selectbox(
-        "Order and priority source", ["Experimental ML", "Rules baseline", "Oldest-first"], key="ranking",
+        "Order and priority source", ["Rules baseline", "Experimental ML", "Oldest-first"], key="ranking",
         help="Rules use visible weights; ML learns synthetic patterns. Both are priority indices, not probabilities. "
              "Oldest-first orders by workflow age and retains rules-based categories.")
     with st.sidebar.expander("Filter plans"):
@@ -390,7 +452,7 @@ def main() -> None:
                                     default=["High", "Medium", "Low"], key="priorities")
     st.sidebar.button(
         "Reset filters & search", key="reset_filters", on_click=reset_review_filters, args=(queue,),
-        help="Show all plans, clear search, restore ML ordering and select the first plan. "
+        help="Show all plans in this collection, clear search, restore rules ordering and select the first plan. "
              "Keeps your review budget and layout; does not change source data or the model.")
     budget = int(st.sidebar.number_input(
         "Review budget K", min_value=1, max_value=500, value=DEFAULT_REVIEW_BUDGET, step=1,
@@ -408,7 +470,7 @@ def main() -> None:
         f"**{len(view)}** plans in view &nbsp; | &nbsp; **{len(ranked)}** scored &nbsp; | &nbsp; "
         f"**{len(needs_triage)}** need data clarification"
     )
-    st.caption(f"Of {len(queue)} historical holdout plans | Priority/action source: {source_label} | Ordered by: {ranking}")
+    st.caption(f"Of {len(queue)} {cohort.lower()} plans | Priority/action source: {source_label} | Ordered by: {ranking}")
     tabs = st.tabs(["Overview", "Review workspace", "Review patterns", "Evidence & export", "About this initiative"],
                    default="Review workspace")
     with tabs[0]:
@@ -466,7 +528,7 @@ def main() -> None:
         with panels[1]:
             if detail_ids:
                 selected = st.session_state["selected_plan"]
-                record = split.test.loc[split.test["plan_id"] == selected].iloc[0].to_dict()
+                record = selected_records.loc[selected_records["plan_id"] == selected].iloc[0].to_dict()
                 display_detail(record, model, config.source)
             else:
                 st.info("No plan is selected: no plans match the current filters and search. "
@@ -474,7 +536,7 @@ def main() -> None:
     with tabs[2]:
         display_patterns(view, config.source, source_label)
     with tabs[3]:
-        display_evidence(split, model, queue, budget)
+        display_evidence(split, model, evaluation_queue, budget)
         with st.expander("Export current original-plan view"):
             st.caption(
                 f"{len(ranked)} scored and {len(needs_triage)} unscored original plans; both scores/categories, exact "
@@ -488,4 +550,4 @@ def main() -> None:
             st.download_button("Download filtered queue JSON", export_json(payload),
                                file_name="synthetic-review-queue.json", mime="application/json", key="export_json")
     with tabs[4]:
-        display_initiative(split, queue)
+        display_initiative(split, evaluation_queue)

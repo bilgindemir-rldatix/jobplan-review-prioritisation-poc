@@ -63,6 +63,7 @@ def filtered_queue(queue: pd.DataFrame, config: ViewConfig) -> pd.DataFrame:
             ]
             return " ".join([
                 row["plan_id"], row["department"], row["specialty"],
+                row["scenario_name"],
                 row["baseline_main_driver"], row["model_main_driver"],
                 *row["input_errors"], *reasons,
             ]).casefold()
