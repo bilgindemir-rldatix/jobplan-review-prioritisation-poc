@@ -95,6 +95,8 @@ stochastically from pre-review signals and latent noise. It is **not** an
 independent judgement that a reviewer would prioritise the plan earlier.
 Do not relabel it. Amendment yield is only a simulation metric and cannot test
 H1-H4 alone; amendments may reflect service constraints or reviewer habits.
+The model is a classical logistic regression, not an LLM; see README "Why
+classical ML, and why not an LLM?".
 
 Recommendation: retain the existing training-only standardised logistic
 regression and its exact signed linear contributions as a controlled experiment.

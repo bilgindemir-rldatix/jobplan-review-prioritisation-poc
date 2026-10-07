@@ -171,8 +171,11 @@ def test_about_short_story_fixed_benchmark_and_settings_across_pages():
         "No live eJobPlan integration", "ML has not demonstrated an advantage",
         "independently reviewed outcome", "information governance", "subgroup",
         "Shadow mode is proposed, NOT implemented", "SYNTHETIC AMENDMENT",
+        "No large language model (LLM) is used",
+        "does not reflect what produced the result",
     ):
         assert expected in text
+    assert "Is this ML? Why not an LLM?" in [item.label for item in app.expander]
     assert benchmark(app).amendments_found.tolist() == [8, 6, 7]
     assert benchmark(app).reviewed.eq(30).all()
     navigate(app, "Review queue")

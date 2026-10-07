@@ -514,6 +514,27 @@ For both indices the illustrative categories use unrounded values:
 | 65 to 100 | High | Consider prioritising Clinical Director review; confirm context and data |
 | No score | Unscored | Resolve required data and route for human triage; do not deprioritise |
 
+## Why classical ML, and why not an LLM?
+
+Yes, the POC uses ML in one place: an experimental L2-regularised logistic
+regression (scikit-learn) on five pre-review features, trained on synthetic
+records. It is a comparator beside the transparent rules, which lead the queue.
+The rules are not ML. **No LLM is used**, and no plan data leaves the app.
+
+| Consideration | Classical model (used) | LLM (not used) |
+|---|---|---|
+| Measurement | Fixed score, testable on held-out data at a review budget | Harder to evaluate the same way |
+| Repeatability | Same inputs and seed give the same result | Output can vary between runs |
+| Explanation fidelity | Signed contributions are the model's actual arithmetic (log-odds) | A fluent reason may not reflect what produced the result |
+| Data handling | Runs locally on a few numeric features | Usually sends content to a service; needs separate governance review |
+| Fit to data | Small structured numeric inputs | Language capability not needed for this input |
+
+This is not a claim that ML beats rules: in the recorded run it has not (see
+Recorded default run). A possible later, separate LLM use is plain-language
+wording of evidence already calculated, or drafting a clarification request for
+a human to edit. It would not score, rank or decide, and it is not built or
+tested here. Any such use would need its own validation and data-governance review.
+
 ## Evaluation design
 
 Training snapshots are earlier than `2025-09-01`, and their outcomes must have

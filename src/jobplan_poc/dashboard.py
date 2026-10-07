@@ -613,6 +613,25 @@ def main() -> None:
         st.markdown("**The journey:** choose a plan → see what changed → decide the next human action.")
         st.markdown("**Why ML?** We are testing whether a learned model adds useful information beyond simple rules. "
                     "It has not demonstrated an advantage in this synthetic experiment.")
+        with st.expander("Is this ML? Why not an LLM?"):
+            st.write("Yes, one part is. The experimental model is a small, classical logistic regression "
+                     "(scikit-learn) trained on synthetic records. It is an optional comparator beside the "
+                     "transparent rules, which lead the queue. The rules are not machine learning. "
+                     "No large language model (LLM) is used anywhere, and no plan data leaves this app.")
+            st.markdown(
+                "- **Measurable:** a classical model gives a fixed score that can be tested on held-out data "
+                "at a review budget. An LLM answer is harder to measure the same way.\n"
+                "- **Repeatable:** the same inputs and seed give the same result. LLM output can vary between runs.\n"
+                "- **Faithful explanation:** the signed contributions are the model's actual arithmetic. "
+                "An LLM can write a fluent reason that does not reflect what produced the result.\n"
+                "- **Data handling:** it runs locally on a handful of numeric features. LLMs usually involve "
+                "sending content to a service, which would need separate governance review.\n"
+                "- **Proportionate:** structured numeric change data does not need a language model."
+            )
+            st.caption("This is not a claim that ML is better than rules. Here it has not been shown to be. "
+                       "A possible later, separate use of an LLM is plain-language wording of evidence already "
+                       "calculated, or drafting a clarification request for a human to edit. It would not "
+                       "score, rank or decide, and it is not built or tested here.")
         st.markdown("**Who decides?** The authorised reviewer. No decision or clarification request is saved or sent.")
         st.markdown("**What this is not:** clinician assessment, automatic approval, a clinical safety prediction "
                     "or a live eJobPlan integration. All plans are fictional.")
