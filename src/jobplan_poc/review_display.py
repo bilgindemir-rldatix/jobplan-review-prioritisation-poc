@@ -59,7 +59,7 @@ def plain_reason(traces: list[dict]) -> str:
         key=lambda trace: -trace["points"],
     )
     if not changed:
-        return "No change was identified by the activity-change rules. Standard human review still applies."
+        return "No change was identified by the activity-change rules. Human review is still needed."
     phrases = [RULE_PHRASES[trace["rule_id"]] for trace in changed[:2]]
     subject = " and ".join(phrases)
     return f"{subject[0].upper()}{subject[1:]} changed from the previous plan. This may be entirely legitimate."

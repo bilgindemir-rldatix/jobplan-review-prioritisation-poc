@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import re
 
 import pytest
@@ -260,3 +261,36 @@ def test_only_static_theme_uses_unsafe_html():
     app.text_input(key="search").set_value('<img src=x onerror="alert(1)">').run()
     assert not app.exception
     assert [item.value for item in app.markdown if item.proto.allow_html] == unsafe
+
+
+@pytest.mark.parametrize("plan_id,reason", [
+    ("JP-005", "previous plan unavailable"),
+    ("JP-006", "current plan is partial"),
+    ("JP-007", "declared total contradicts"),
+])
+def test_invalid_scenario_dialog_withholds_values_and_names_actual_problem(plan_id, reason):
+    app = start_app()
+    app.toggle(key="show_demos").set_value(True).run()
+    app.button(key="view_" + plan_id).click().run()
+    assert not app.exception
+    assert reason in content(app)
+    app.button(key="why_highlighted").click().run()
+    assert not app.exception
+    assert len(app.json) == 5
+    for item in app.json:
+        trace = json.loads(item.value)
+        assert trace["state"] == "withheld"
+        assert trace["points"] is None and trace["observed_difference"] is None
+    assert "Experimental model: unavailable" in content(app)
+    assert not any(item.label == "Score isolated scenario" for item in app.button)
+
+
+def test_model_priority_does_not_imply_the_rules_observed_a_change():
+    app = start_app()
+    app.toggle(key="show_demos").set_value(True).run()
+    app.selectbox(key="order").set_value("Experimental model").run()
+    app.button(key="view_JP-009").click().run()
+    assert not app.exception
+    assert "Suggested review priority: Review sooner" in content(app)
+    assert "No change was identified by the activity-change rules. Human review is still needed." in content(app)
+    assert "Priority source: Experimental model" in content(app)

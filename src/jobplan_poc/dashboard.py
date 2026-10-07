@@ -132,12 +132,12 @@ def display_information(record: dict, errors: tuple | list, *, details: bool = F
         for error in errors:
             st.text(error)
     if details:
-        st.caption(
-            "Items are grouped validation checks, not a percentage of all fields or model confidence. "
-            "Known recorded completeness can be below 100% while all required items are valid."
-        )
         if items is not None:
             with st.expander("Required information checklist"):
+                st.caption(
+                    "Items are grouped validation checks, not a percentage of all fields or model confidence. "
+                    "Known recorded completeness can be below 100% while all required items are valid."
+                )
                 st.table(pd.DataFrame([
                     {"Required item": name, "State": "Available and valid" if valid else "Needs clarification"}
                     for name, valid in items.items()
@@ -228,8 +228,10 @@ def display_detail(record: dict, model: ReviewModel, source: str, signal: str) -
         st.subheader(f"{len(changes)} notable changes")
         st.caption("Observed differences, not findings of inappropriate allocation.")
         if changes:
-            for change in changes:
-                st.markdown("- " + markdown_text(change))
+            st.markdown("\n".join("- " + markdown_text(change) for change in changes[:5]))
+            if len(changes) > 5:
+                with st.expander(f"{len(changes) - 5} more activity and pattern changes"):
+                    st.markdown("\n".join("- " + markdown_text(change) for change in changes[5:]))
         else:
             st.text("No observed activity, allocation or working-pattern changes. Continue human review as usual.")
         with st.expander("Compare versions", expanded=True):
@@ -411,8 +413,8 @@ def display_cards(view: pd.DataFrame, records: pd.DataFrame, source: str, signal
     page = st.session_state.get(page_key, 0)
     start = page * PAGE_SIZE
     if len(view) > PAGE_SIZE:
-        st.caption(f"Showing {start + 1} to {min(start + PAGE_SIZE, len(view))} of {len(view)} plans")
-        with st.container(horizontal=True):
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.caption(f"Showing {start + 1} to {min(start + PAGE_SIZE, len(view))} of {len(view)} plans")
             st.button("Previous page", key=page_key + "_previous", disabled=page == 0,
                       on_click=change_page, args=(page_key, -1), icon=":material/chevron_left:")
             st.button("Next page", key=page_key + "_next", disabled=start + PAGE_SIZE >= len(view),
@@ -421,22 +423,22 @@ def display_cards(view: pd.DataFrame, records: pd.DataFrame, source: str, signal
     for row in view.iloc[start:start + PAGE_SIZE].to_dict("records"):
         record = originals.loc[row["plan_id"]].to_dict()
         with st.container(border=True, key="plan-card-" + row["plan_id"]):
-            st.markdown("**" + markdown_text(f"{row['plan_id']} · {row['specialty']}") + "**")
+            with st.container(horizontal=True, vertical_alignment="center"):
+                st.markdown("**" + markdown_text(f"{row['plan_id']} · {row['specialty']}") + "**")
+                st.button("Request data clarification" if triage else "View JobPlan", key="view_" + row["plan_id"],
+                          icon=":material/contact_support:" if triage else ":material/arrow_forward:",
+                          on_click=open_detail, args=(row["plan_id"],),
+                          help=("Open " + row["plan_id"] + ". No request is sent or saved." if triage else
+                                "Open " + row["plan_id"] + " and compare the source versions."))
             priority_badge(row[f"{source}_category"])
             if triage:
                 display_information(record, row["input_errors"])
-                st.button("Request data clarification", key="view_" + row["plan_id"],
-                          icon=":material/contact_support:", on_click=open_detail, args=(row["plan_id"],),
-                          help="Open the plan and review missing information. No request is sent or saved.")
             else:
                 st.markdown("**" + markdown_text(plain_reason(row["rule_traces"])) + "**")
                 count = rules_applied(row["rule_traces"])
                 st.caption(f"{count} {'rule applies' if count == 1 else 'rules apply'} · "
                            f"Experimental model signal: {signals[row['plan_id']]}")
                 st.caption(previous_snapshot_label(record))
-                st.button("View JobPlan", key="view_" + row["plan_id"], icon=":material/arrow_forward:",
-                          on_click=open_detail, args=(row["plan_id"],),
-                          help="Open " + row["plan_id"] + " and compare the source versions.")
 
 
 def change_page(key: str, step: int) -> None:

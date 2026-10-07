@@ -15,6 +15,10 @@ and agree consent, recording and minimisation arrangements. Explain that no
 real decision is made, no clinical safety claim exists and disagreement with
 an index is appropriate. Record build, generator seed/version, rule catalogue,
 thresholds, model version, budget, displayed collection and facilitator prompts.
+In v7, open cases through **View JobPlan** (or **Request data clarification**),
+then **Why is this highlighted?**. The queue-header **Demonstration scenarios**
+toggle switches the fictional collection. Budget and evidence are on **Rules vs ML**.
+Neither selecting a reviewer option nor opening clarification sends a request.
 
 Obtain an independently reviewed assessment rubric before assessing H3/H4:
 earlier attention, routine order, clarification and uncertain must be distinct.
@@ -32,7 +36,7 @@ which ordering participants see first to reduce anchoring/learning effects.
 | Explain Why highlighted using the observed value, threshold and points | H2 | Correct source, units, partial signal versus threshold reached; no causal inference |
 | Compare JP-008 and JP-009, then full-holdout top-K disagreement | H2, H4 | Identify which signals each method uses; avoid treating discrepancy as misconduct |
 | Try what-if and check the original queue/export | H1, H2 | Understand isolation and non-causality; no score-gaming advice inferred |
-| Reset a no-result search and locate the selected plan | H1 | Recovery, selection consistency, data-triage discoverability |
+| Reset a no-result search, open a plan and return to queue | H1 | Recovery, scope/selection consistency, data-triage discoverability |
 | Compare orderings with an independent rubric, if available | H3, H4 | Fixed-budget review yield plus observed time/usability; assess no-ML-benefit conclusion |
 
 A facilitator should not imply that a higher number is correct or that a

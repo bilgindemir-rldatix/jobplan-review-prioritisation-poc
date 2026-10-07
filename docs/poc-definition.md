@@ -50,11 +50,14 @@ the actual rule evidence and separate model terms; decide the next human action.
 Missing or contradictory information requires clarification, not a Low score.
 Prioritisation is not a decision.
 
-Retain the light Streamlit workspace, visible navigation and adjacent detail.
-The queue is rules-led by default, with an explicitly experimental ML ordering.
-Overview gives scope; Review workspace handles queue/detail/scenarios;
-Review patterns describes workload, not quality; Evidence & export holds
-comparison and disagreements; About this initiative explains the Product case.
+The v7 presentation keeps Streamlit and the light review workspace. A three-item
+rail replaces the v6 five-tab/adjacent-detail arrangement: Review queue (default),
+Rules vs ML, About this POC. Detail opens from a queue action and returns with
+Back to queue. Summary counts absorb Overview; service workload and exports
+sit with evaluation. Exact traces and model terms use a native dialog.
+The queue is rules-led by default, with an explicitly experimental ML alternative.
+See [v7 design system](ux-design-system.md) for the accepted presentation mapping
+and its limits. No scoring, generation, evaluation or export semantics changed.
 Technical evidence is a demonstration surface, not a production permission model.
 
 ## Rules approach

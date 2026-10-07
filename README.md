@@ -39,13 +39,13 @@ no dataset or model artefact is automatically written. Explicit downloads save
 the selected export through your browser. Re-running with the same seed reproduces
 the data independently of the wall clock. Exact dependency versions can affect
 last-digit model results; supported dependency ranges are in `pyproject.toml`.
-The workspace uses the tested Streamlit 1.65+ native tab/selection APIs; no
+The workspace uses the tested Streamlit 1.65+ native navigation/dialog/widget APIs; no
 additional UI framework or runtime dependency is introduced.
 
 ### Updating an already running demo
 
-The current interface shows **Build: clinical-workspace-v6** directly below
-**JobPlan review workspace**. Check this marker rather than assuming a browser
+The current interface shows **Build: clinical-workspace-v7** in the navigation
+rail footer and **About this POC**. Check this marker rather than assuming a browser
 refresh loads changed Python modules. If it is absent, stop **your own demo
 server** with Ctrl+C in its original terminal, change to this checkout and run:
 
@@ -86,55 +86,75 @@ measured **at that snapshot**, not at today's date. This is not a live waiting l
 The separate **Demonstration scenarios** collection contains nine fixed
 fictional JP cases, never training or evaluation records. Collection changes
 retain the current filters; reset them if no cases match. Evidence and the
-About-tab benchmark always use the evaluation holdout, never demonstrations.
+About-page benchmark always use the evaluation holdout, never demonstrations.
 
-The default is a restrained **light workspace**, using Streamlit's supported
-theme and layout APIs: dark text, white surfaces and teal controls. There is no
-injected CSS or JavaScript. Priority remains visible as text, not colour alone.
-The compact overview is a single count line rather than large metric cards.
+V7 is a **presentation-only redesign**: a deep-teal rail, neutral surfaces,
+native controls and one static scoped CSS block. No JavaScript, proprietary
+assets or dynamic HTML. Its [design system](docs/ux-design-system.md) records
+tokens, accessibility checks, before/after decisions and CSS fallbacks.
+Scoring, rules, generation, evaluation and export engines/schema are unchanged.
 
-Five prominent top-level tabs stay visible: **Overview**, **Review workspace**
-(selected initially), **Review patterns**, **Evidence & export** and
-**About this initiative**. Supporting
-details use expanders; the main navigation is never hidden in them.
+The smallest navigation is **Review queue** (default), **Rules vs ML** and
+**About this POC**. Detail opens from a plan action, not a navigation item.
 
 | Area | Purpose |
 |---|---|
-| Overview tab | Plain-language starting guidance, scored priority distribution and population definitions |
-| Review workspace (default) | Compact queue beside the selected plan, both indices, main driver, next human action and data sufficiency |
-| Data clarification | Separate selectable unscored list under the queue, with recorded completeness |
-| Selected plan expanders | Activity-level and working-pattern comparison, Why highlighted rule evidence, separate model contributions and isolated what-if |
-| Review patterns tab | Fictional department/specialty workload counts, denominators and small-group caveats |
-| Evidence & export tab | Full-holdout rules/ML/oldest/random/legacy comparison, overlap and disagreement, with downloads in an explicit export expander |
-| About this initiative tab | Product-friendly problem, intended users, value hypothesis, fictional journey, current scope, learning and decision gates |
+| Review queue | Three count/filter buttons, search, order selector, reason-first native plan cards; no indices or rule IDs |
+| Data clarification | Separate section naming actual missing/invalid information; Request data clarification opens detail but sends nothing |
+| JobPlan detail | Back to queue, observed changes, signed comparison, source activities, working pattern and human-owned options |
+| Why is this highlighted? | Native dialog: plain reason, exact versioned rule evidence, separate experimental model disclosure |
+| Rules vs ML | Full-holdout five-method comparison, budget, overlap/disagreement, model behaviour, service workload and original-plan exports |
+| About this POC | Product problem, hypotheses, fictional journey, current scope, actual learning and proposed decision gates |
 
-Select a table row or use **Selected plan**; the **Viewing** indicator always
-marks the plan shown alongside. Changing filters or ordering resets obsolete
-table selections, preventing a stale row from selecting the wrong plan. The
-selected plan persists when moving between tabs if still in
-scope. The sidebar's **Stack queue and detail (smaller window)** switch places
-the same panels vertically without changing selection, scores or filters.
-Tables can scroll horizontally where necessary; Streamlit handles narrow
-screens and sidebar collapse. Exact contribution tables and what-if controls
-stay behind deliberate expanders so they do not dominate the initial workflow.
+**Review sooner** maps to the existing High category; **Standard review**
+combines Medium and Low; **Data clarification required** maps to missing/invalid
+required data. These are illustrative display settings, not policy, a new
+scoring rule or a validated earlier-review target. The target remains synthetic
+amendment. Legacy categories and actions remain unchanged in exports and
+technical evidence; the simplified human options are not automated recommendations.
 
-The review orientation is **choose a plan, understand the review reasons, decide
-the next human action**. Hover help explains rules versus experimental ML,
-priority indices versus probabilities, and completeness versus confidence.
-No approval buttons, saved review decisions or live workflow integration are
-implied.
+Click a count to filter, and click it again to restore all categories. Counts
+reflect search/service/pattern/stage scope **before category filtering**.
+Matching clarification records always remain in their own section, even with
+Review sooner or Standard review selected, preserving the export/triage policy.
+Selecting Data clarification hides scored cards, not their underlying data.
 
-**Reset filters & search** in the sidebar restores all specialty, working-pattern,
-stage and priority options in the current collection, clears search, restores rules-led ordering and
-selects the first available plan. Obsolete row selections are invalidated.
-It preserves the review budget and layout; it does not alter source data,
-scenario inputs or model fitting. As before, submitted scenario outputs are
-transient and disappear on a new unrelated interaction. Empty states point to
-this reset action and the separate unscored list instead of leaving a dead end.
+**View JobPlan** opens a focused detail page. **Back to queue** restores the
+current page and scope. Pagination shows eight cards per section; counts,
+relative model wording, workload and exports use the **whole** filtered view,
+not only the visible page. No index or rule ID is displayed on a queue card.
+The main sentence describes the largest non-zero rule terms, not causal
+importance. "Rules apply" counts non-zero signals, including partial signals;
+thresholds and points remain exact in the explanation dialog.
 
-### About this initiative: the Product conversation
+The experimental model line says higher/lower than most other eligible plans
+only when a **strict majority** has a lower/higher index. Ties can yield neither;
+a singleton has no comparison. This is relative position, not uncertainty,
+confidence or clinical need. Changing filters can change this wording without
+changing any model index. A plan with no change-rule signals can still have
+an experimental administrative signal; the UI keeps these explanations separate.
 
-The fifth tab explains the finite-review-time problem and the hypothesis of
+Linked v1 has **no previous-version snapshot date**. Cards explicitly say
+"not recorded"; the current snapshot is never presented as the previous date.
+Totals come from validated linked activities. Comparison highlights changed
+rows with signed differences and keeps unchanged measures in a disclosure.
+Session additions/removals do not imply a particular activity moved: actual
+per-activity changes are separately matched by stable ID.
+
+**Reset filters & search** restores the current collection's service, pattern,
+stage and category scope, clears search, restores rules ordering and closes
+detail. It preserves collection and experimental budget; it never changes
+records, model fitting or scenario inputs. Hidden controls retain their state
+across navigation. A selected plan outside the current scope is cleared,
+never silently replaced. A no-result state points to reset and clarification.
+
+Reviewer radio options are **not recommendations** and save no decision or
+request. A temporary radio selection is UI state only. What-if remains a
+secondary expander, and its submitted results disappear on unrelated interaction.
+
+### About this POC: the Product conversation
+
+The About page explains the finite-review-time problem and the hypothesis of
 more understandable, focused prioritisation without claiming time savings or
 clinical benefits. It separates what is implemented (synthetic local review
 support) from proposed future work. A concrete fictional journey shows how a
@@ -143,12 +163,12 @@ judgement with an authorised human.
 
 Its default-demo benchmark is calculated using the existing comparison function,
 the full common holdout and a fixed budget of **30**, independent of search,
-filters, collection, what-if edits and the active sidebar budget. The current default
+filters, collection, what-if edits and the experimental budget. The current default
 result is rules **8**, ML **6**, oldest-first **7** synthetic amendments found.
 The new activity-change rules happen to find the same count as the old baseline;
 they are not the same index. Both are identified in Evidence.
 ML has not demonstrated advantage here; Product can assess workflow value even
-if transparent rules are preferable. The Evidence tab remains the place to vary
+if transparent rules are preferable. Rules vs ML remains the place to vary
 the review budget. Neither table validates future real-world review need.
 
 Decision gates cover an independently reviewed outcome definition, approved
@@ -159,29 +179,33 @@ is **proposed, not implemented**, before any rollout. There are no invented
 targets, promised benefits or timelines. A short walkthrough/glossary is
 available without duplicating the detailed model evidence.
 
-The sidebar filters specialty, working pattern, workflow stage and review
-priority. Free-text search is a case-insensitive **literal phrase** across
+The queue header filters service, working pattern, workflow stage and display
+category. Free-text search is a case-insensitive **literal phrase** across
 fictional IDs, departments, specialties, both scorers' actual driver labels and
 input-error reasons (not a regex or outcome search). All workspace areas use the same
 filtered original-plan view **except the benchmark**, which deliberately remains
 the full common eligible holdout. Counts and selected-plan options follow that
-view. A selection that leaves the view is replaced with its first available
-plan; an empty view clears the detail. Clearing search/filters restores options.
+view. A selection that leaves the view is cleared. Clearing search/filters restores options.
 
-Rules-led ordering is the default. Alternatives are explicitly experimental ML
-or time in the current workflow stage. The selected score
-source defines the priority filter, overview distribution, actions and group
-rates. With oldest-first, these remain **rules-based**, while ordering uses age.
-Both scores stay separate: no blending, target-score hints, preset category
+Rules-led ordering is the default; **Experimental model** is the explicit
+alternative. The selected source defines display categories, filters and group
+rates. Oldest-first remains an evaluation comparator, not an extra reviewer
+control. Both scores stay separate: no blending, target-score hints, preset category
 clipping or ID-based score jitter. IDs only break exact ranking ties.
 
 Missing/invalid required inputs show **Data clarification required / Priority
 cannot be reliably calculated**, in a **separate unscored data-triage list**,
 never at the bottom of the ranked queue or labelled Low. Priority filters do not
 hide them; specialty/pattern/stage filters and text search still apply. Humans
-must resolve or triage them independently of the ranked review budget. Recorded
-completeness percentage is a **data indicator, NOT model confidence**; a populated
-percentage cannot compensate for a missing required scoring input.
+must resolve or triage them independently of the ranked review budget.
+**Information available: X of 7 required items** groups existing validation
+checks: subject link; previous version/activities; current version/activities;
+snapshot date; workflow timing; review due date; recorded completeness.
+An item is counted only when its checks pass. Unknown validation findings make
+the count unavailable rather than presenting an optimistic default.
+These grouped checks are **not a percentage of all fields or model confidence**.
+A known completeness percentage below 100 is still a valid input; it does not
+compensate for a missing or invalid required item.
 
 What-if controls change current total activity, WTE, completeness, stage age and
 due-date offset. Total changes preserve activity mix and rescale the linked
@@ -191,10 +215,10 @@ patterns, fitting, benchmark and exports never change. Scenarios pass through
 the same validation/scoring functions, stay transient and do not repair missing
 source data. They are **not causal estimates or advice to obtain a better score**.
 
-### Review-pattern denominators
+### Service-workload denominators
 
-Groups contain only plans in the current filtered view. For each department or
-specialty, `total_plans = scored_plans + unscored_plans`, and
+The small service view in Rules vs ML contains only the current filtered
+original-plan collection. For each specialty, `total_plans = scored_plans + unscored_plans`, and
 `high_priority_rate_among_scored = high_priority_plans / scored_plans`, using the
 selected scoring source. Rates are proportions from 0 to 1, not percentages.
 A zero scored denominator gives an unavailable rate, not zero. Fewer than five
@@ -555,7 +579,9 @@ rules.py -> versioned R-01..R-05 catalogue, source evidence and exact index poin
 scoring.py -> legacy rules / training-only linear model / signed terms / isolated what-if
 evaluation.py -> purged split, common-cohort ranks, repeated random benchmark and disagreement
 presentation.py -> shared filtered scope, workload denominators, deterministic safe exports
-dashboard.py -> light review workspace, adjacent detail, secondary patterns/evidence/export
+review_display.py -> display categories, faithful reasons/comparisons and relative model wording
+theme.py / .streamlit/config.toml -> static tokens, native theme and scoped CSS
+dashboard.py -> three-page shell, queue cards, detail/dialog, evidence/workload/export
 app.py -> Streamlit entry point
 tests/ -> reproducibility, bounds, missingness, leakage, contributions, metrics and UI
 ```
