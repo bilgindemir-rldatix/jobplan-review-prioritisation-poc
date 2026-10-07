@@ -6,6 +6,8 @@ from numbers import Real
 import numpy as np
 import pandas as pd
 
+from jobplan_poc.records import validate_sources
+
 
 FEATURE_NAMES = (
     "activity_change_per_wte",
@@ -63,6 +65,11 @@ def read_date(value: object, name: str) -> pd.Timestamp:
 
 def extract_features(record: dict) -> FeatureResult:
     errors: list[str] = []
+    if "versions" in record:
+        source = validate_sources(record)
+        if source.errors:
+            return FeatureResult(None, source.errors)
+        record = {**record, **source.values}
     numbers: dict[str, float] = {}
     dates: dict[str, pd.Timestamp] = {}
     for field in NUMERIC_FIELDS:
