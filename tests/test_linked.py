@@ -67,6 +67,7 @@ def test_semantic_scenarios_are_deterministic_separate_and_unscored_when_incompl
 @pytest.mark.parametrize("mutate", [
     lambda r: r["versions"]["current"]["activities"][0].update(pa=-1),
     lambda r: r["versions"]["current"]["activities"][0].update(category=None),
+    lambda r: r["versions"]["current"]["activities"][0].update(category={"invalid": "category"}),
     lambda r: r["versions"]["current"]["activities"][0].update(site=None),
     lambda r: r["versions"]["current"]["activities"][0].update(session="Sunday AM"),
     lambda r: r["versions"]["current"]["activities"][0].update(version_id="wrong"),
@@ -74,6 +75,7 @@ def test_semantic_scenarios_are_deterministic_separate_and_unscored_when_incompl
     lambda r: r["versions"]["current"].update(working_pattern=[]),
     lambda r: r.update(current_total_pa=r["current_total_pa"] + 2),
     lambda r: r["subject"].update(subject_id="wrong"),
+    lambda r: [a.update(pa=1e308) for a in r["versions"]["current"]["activities"]],
 ])
 def test_contradictions_never_silently_repaired(linked, mutate):
     records, _, model = linked

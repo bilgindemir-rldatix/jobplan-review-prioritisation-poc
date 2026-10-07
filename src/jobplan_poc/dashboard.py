@@ -5,7 +5,9 @@ from functools import partial
 import pandas as pd
 import streamlit as st
 
-from jobplan_poc.evaluation import compare_methods, score_queue, temporal_split
+from jobplan_poc.evaluation import (
+    RANDOM_REPEATS, RANDOM_SEED, compare_methods, experiment_report, score_queue, temporal_split,
+)
 from jobplan_poc.features import FEATURE_LABELS, extract_features
 from jobplan_poc.dataset import demonstration_plans, generate_dataset
 from jobplan_poc.records import activity_comparison, validate_sources
@@ -205,8 +207,16 @@ def display_evidence(split, model, queue, budget: int) -> None:
         "fairness or clinical utility. ML is not guaranteed to outperform the baseline or oldest-first."
     )
     outcomes = split.test.set_index("plan_id")["material_amendment"]
-    metrics = compare_methods(queue, outcomes, budget)
-    st.dataframe(metrics, hide_index=True, width="stretch")
+    report = experiment_report(queue, outcomes, budget)
+    metrics = report.metrics
+    st.dataframe(metrics[["method", "reviewed", "cohort", "positives", "amendments_found",
+                          "precision_at_k", "recall_at_k"]], hide_index=True, width="stretch",
+                 column_config={
+                     "method": "Ordering", "reviewed": "Plans reviewed", "cohort": "Eligible plans",
+                     "positives": "Synthetic amendments", "amendments_found": "Cases found",
+                     "precision_at_k": st.column_config.NumberColumn("Precision@K", format="%.3f"),
+                     "recall_at_k": st.column_config.NumberColumn("Recall@K", format="%.3f"),
+                 })
     st.caption(
         f"Full later holdout, unaffected by queue filters or what-if edits; same sufficient cohort for all methods. "
         f"{len(queue) - int(metrics.iloc[0]['cohort'])} insufficient-data rows excluded from ALL benchmark methods "
@@ -215,6 +225,51 @@ def display_evidence(split, model, queue, budget: int) -> None:
         "Undefined metrics are shown as empty/None, never zero; no-positive recall is unavailable. "
         "Outcomes are stochastic synthetic material amendments observed 30 days after the snapshot."
     )
+    st.caption(
+        f"Rules baseline now means {RULESET_VERSION}, calculated from R-01..R-05. Legacy v5 rules retain the "
+        "previous administrative/change index for reference; they are not blended. Oldest-first means current "
+        "workflow-stage age, not clinician age or a clinical urgency judgement."
+    )
+    with st.expander("Random comparison: mean and spread"):
+        st.dataframe(metrics.loc[metrics["method"].str.startswith("Random"), [
+            "amendments_found", "amendments_found_std", "amendments_found_min", "amendments_found_max",
+            "precision_at_k", "precision_at_k_std", "recall_at_k", "recall_at_k_std",
+        ]], hide_index=True, width="stretch")
+        st.caption(
+            f"{RANDOM_REPEATS} permutations of the same eligible cohort, seed {RANDOM_SEED}. "
+            "Mean, population standard deviation and observed range describe random-order variability, "
+            "not confidence intervals, model ranking stability or real-world uncertainty. "
+            "No bootstrap stability claim is made for this single synthetic fitted model."
+        )
+    overlap = report.overlap
+    st.subheader("Rules versus ML: top-K overlap and disagreements")
+    st.write(
+        f"Of {overlap['actual_k']} reviewed plans per method, {overlap['shared_cases']} are shared; "
+        f"{overlap['rules_only']} are selected only by rules and {overlap['model_only']} only by ML."
+    )
+    st.caption(
+        "Same full sufficient holdout, independent of view filters and demonstration scenarios. "
+        "Shared fraction uses actual K; Jaccard uses the union of the two selections. "
+        f"Shared fraction: {overlap['shared_fraction_at_k']}; Jaccard: {overlap['jaccard']}. "
+        "Undefined empty-cohort ratios are unavailable. Different rankings do not establish which is appropriate."
+    )
+    if report.disagreements.empty:
+        st.info("No top-K selection disagreements at this budget (or no eligible records).")
+    else:
+        st.dataframe(report.disagreements, hide_index=True, width="stretch",
+                     column_config={
+                         "plan_id": "Plan", "selected_by": "Selected by", "rules_rank": "Rules position",
+                         "model_rank": "ML position", "rules_index": "Rules /100", "model_index": "ML /100",
+                         "rules_reason": "Actual rules reason", "model_reason": "Actual model reason",
+                     })
+        with st.expander("Inspect a disagreement's exact explanations"):
+            disagreement_id = st.selectbox("Disagreement plan", report.disagreements["plan_id"].tolist())
+            evidence_row = queue.loc[queue["plan_id"] == disagreement_id].iloc[0]
+            st.json({"rule_traces": evidence_row["rule_traces"],
+                     "model_intercept": evidence_row["model_intercept"],
+                     "model_decision": evidence_row["model_decision"],
+                     "signed_model_log_odds_contributions": evidence_row["model_contributions"]})
+            st.caption("Exact source rule traces and actual model-space contributions, not a causal explanation or approval.")
     with st.expander("Model and data provenance"):
         st.write(
             f"Seed {DEFAULT_SEED}; fixed reference date {REFERENCE_DATE:%Y-%m-%d}; "
@@ -225,8 +280,9 @@ def display_evidence(split, model, queue, budget: int) -> None:
         )
         st.write(
             "StandardScaler and L2-regularised logistic regression are fitted on earlier training records only. "
-            "Only five named pre-review features enter the model; IDs, specialty, working pattern, "
-            "workflow stage label, outcomes and outcome dates do not. There is no hyperparameter search. "
+            "Only five named pre-review features enter the model; IDs, specialty, working-pattern labels, "
+            "day/session slots, site, activity IDs, workflow stage label, outcomes and outcome dates do not. "
+            "WTE is used to derive normalised PA change. There is no hyperparameter search. "
             "Repeated holdout entity IDs are excluded from training if supplied."
         )
         st.write(

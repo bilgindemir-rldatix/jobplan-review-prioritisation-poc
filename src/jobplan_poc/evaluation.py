@@ -112,6 +112,8 @@ def rank_queue(queue: pd.DataFrame, score_column: str) -> pd.DataFrame:
 
 
 def budget_metrics(ranked: pd.DataFrame, labels: pd.Series, budget: int) -> dict:
+    if "cohort" in ranked and not ranked["cohort"].eq("evaluation").all():
+        raise ValueError("Metrics exclude demonstration scenarios; use only evaluation-cohort records.")
     if isinstance(budget, bool) or not isinstance(budget, int) or budget < 1:
         raise ValueError("Review budget must be a positive integer.")
     if not labels.index.is_unique or ranked["plan_id"].duplicated().any():
@@ -134,6 +136,8 @@ def budget_metrics(ranked: pd.DataFrame, labels: pd.Series, budget: int) -> dict
 
 
 def compare_methods(queue: pd.DataFrame, outcomes: pd.Series, budget: int) -> pd.DataFrame:
+    if "cohort" in queue and not queue["cohort"].eq("evaluation").all():
+        raise ValueError("Metrics exclude demonstration scenarios; use only evaluation-cohort records.")
     # Use exactly the same sufficient cohort, including for the oldest-first comparator.
     cohort = queue.dropna(subset=["baseline_index", "model_index", "workflow_age_days"])
     rows = []
@@ -144,3 +148,76 @@ def compare_methods(queue: pd.DataFrame, outcomes: pd.Series, budget: int) -> pd
     ]:
         rows.append({"method": name, **budget_metrics(rank_queue(cohort, column), outcomes, budget)})
     return pd.DataFrame(rows)
+
+
+RANDOM_SEED = 314
+RANDOM_REPEATS = 100
+
+
+@dataclass(frozen=True)
+class Experiment:
+    metrics: pd.DataFrame
+    random_runs: pd.DataFrame
+    overlap: dict
+    disagreements: pd.DataFrame
+
+
+def experiment_report(queue: pd.DataFrame, outcomes: pd.Series, budget: int,
+                      *, seed: int = RANDOM_SEED, repeats: int = RANDOM_REPEATS) -> Experiment:
+    if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 2:
+        raise ValueError("Random comparison requires at least two repetitions.")
+    deterministic = compare_methods(queue, outcomes, budget)
+    cohort = queue.dropna(subset=["baseline_index", "model_index", "workflow_age_days"]).sort_values("plan_id")
+    # Legacy score is reported on the SAME cohort, never used to widen it.
+    if "legacy_baseline_index" in cohort and cohort["legacy_baseline_index"].notna().all():
+        legacy_order = cohort.sort_values(["legacy_baseline_index", "plan_id"], ascending=[False, True])
+        legacy = {"method": "Legacy v5 rules", **budget_metrics(legacy_order, outcomes, budget)}
+        deterministic = pd.DataFrame([*deterministic.to_dict("records"), legacy])
+    rng = np.random.default_rng(seed)
+    runs = pd.DataFrame([
+        {"repetition": index + 1, **budget_metrics(cohort.iloc[rng.permutation(len(cohort))], outcomes, budget)}
+        for index in range(repeats)
+    ])
+    random = {
+        "method": f"Random ordering (mean of {repeats})",
+        **{name: int(runs.iloc[0][name]) for name in ("requested_budget", "reviewed", "cohort", "positives")},
+    }
+    for name in ("amendments_found", "precision_at_k", "recall_at_k"):
+        values = runs[name].dropna().to_numpy(dtype=float)
+        random[name] = float(values.mean()) if len(values) else None
+        random[f"{name}_std"] = float(values.std(ddof=0)) if len(values) else None
+        random[f"{name}_min"] = float(values.min()) if len(values) else None
+        random[f"{name}_max"] = float(values.max()) if len(values) else None
+    metrics = pd.DataFrame([*deterministic.to_dict("records"), random])
+    rules_order, model_order = rank_queue(cohort, "baseline_index"), rank_queue(cohort, "model_index")
+    rules_top = set(rules_order.head(budget)["plan_id"])
+    model_top = set(model_order.head(budget)["plan_id"])
+    shared, union = rules_top & model_top, rules_top | model_top
+    actual_k = min(budget, len(cohort))
+    overlap = {
+        "requested_budget": budget, "actual_k": actual_k, "common_cohort": len(cohort),
+        "shared_cases": len(shared), "rules_only": len(rules_top - model_top),
+        "model_only": len(model_top - rules_top),
+        "shared_fraction_at_k": len(shared) / actual_k if actual_k else None,
+        "jaccard": len(shared) / len(union) if union else None,
+    }
+    rules_ranks = {plan_id: rank for rank, plan_id in enumerate(rules_order["plan_id"], 1)}
+    model_ranks = {plan_id: rank for rank, plan_id in enumerate(model_order["plan_id"], 1)}
+    rows = []
+    for record in cohort.to_dict("records"):
+        plan_id = record["plan_id"]
+        if plan_id not in rules_top ^ model_top:
+            continue
+        rows.append({
+            "plan_id": plan_id, "selected_by": "Rules only at K" if plan_id in rules_top else "ML only at K",
+            "rules_rank": rules_ranks[plan_id], "model_rank": model_ranks[plan_id],
+            "rules_index": record["baseline_index"], "model_index": record["model_index"],
+            "rules_reason": record["baseline_main_driver"], "model_reason": record["model_main_driver"],
+        })
+    disagreements = pd.DataFrame(rows, columns=[
+        "plan_id", "selected_by", "rules_rank", "model_rank", "rules_index", "model_index",
+        "rules_reason", "model_reason",
+    ])
+    if not disagreements.empty:
+        disagreements = disagreements.sort_values(["selected_by", "rules_rank", "model_rank", "plan_id"])
+    return Experiment(metrics, runs, overlap, disagreements)

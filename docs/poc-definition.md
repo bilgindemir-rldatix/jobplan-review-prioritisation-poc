@@ -60,7 +60,7 @@ Technical evidence is a demonstration surface, not a production permission model
 ## Rules approach
 
 R-01: total PA change after normalising by each version's WTE.
-R-02: redistribution across DCC/SPA/Other categories after WTE normalisation.
+R-02: redistribution across DCC/SPA/Other category shares, invariant to proportional WTE/PA change.
 R-03: stable activity IDs added or removed.
 R-04: changed working-pattern sessions.
 R-05: changed site allocation.

@@ -53,7 +53,8 @@ def validate_sources(record: dict) -> SourceResult:
         if not isinstance(version, dict):
             errors.append(f"{prefix} plan unavailable; comparison cannot be calculated.")
             continue
-        if version.get("plan_id") != record.get("plan_id") or not version.get("version_id"):
+        if (version.get("plan_id") != record.get("plan_id")
+                or not isinstance(version.get("version_id"), str) or not version["version_id"]):
             errors.append(f"{prefix} version must link to this plan and have a version ID.")
         version_ids.append(version.get("version_id"))
         if version.get("complete") is not True:
@@ -81,7 +82,7 @@ def validate_sources(record: dict) -> SourceResult:
                 ids.append(activity_id)
             if activity.get("version_id") != version.get("version_id"):
                 errors.append(f"{prefix} activity {activity_id}: version link mismatch.")
-            if activity.get("category") not in CATEGORIES:
+            if not isinstance(activity.get("category"), str) or activity["category"] not in CATEGORIES:
                 errors.append(f"{prefix} activity {activity_id}: category mapping is missing or invalid.")
             if not finite_number(activity.get("pa")):
                 errors.append(f"{prefix} activity {activity_id}: PA must be a finite non-negative number.")
@@ -93,7 +94,11 @@ def validate_sources(record: dict) -> SourceResult:
             errors.append(f"{prefix} activity IDs are duplicated; stable matching is ambiguous.")
         if len(errors) != start:
             continue
-        derived = version_totals(version)
+        try:
+            derived = version_totals(version)
+        except OverflowError:
+            errors.append(f"{prefix} activity total exceeds the supported finite numeric range.")
+            continue
         if not finite_number(derived["total_pa"], positive=True):
             errors.append(f"{prefix} activity total must be positive.")
         declared = version.get("declared_total_pa")

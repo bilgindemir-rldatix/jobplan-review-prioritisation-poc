@@ -48,7 +48,7 @@ def test_workspace_identity_selection_search_empty_and_secondary_navigation():
     assert any("No plan is selected" in item.value for item in app.info)
     assert any("No workload groups" in item.value for item in app.info)
     assert len(app.get("download_button")) == 2
-    assert benchmark(app).amendments_found.tolist() == [8, 6, 7]
+    assert benchmark(app).amendments_found.tolist()[:3] == [8, 6, 7]
     app.text_input(key="search").set_value("").run()
     assert not app.exception
     retained = app.selectbox(key="selected_plan").options[2]
@@ -196,7 +196,7 @@ def test_initiative_content_and_fixed_default_benchmark():
     next(item for item in app.number_input if item.label == "Review budget K").set_value(12)
     app.text_input(key="search").set_value("no-such-plan").run()
     assert not app.exception
-    assert benchmark(app).reviewed.tolist() == [12, 12, 12]
+    assert benchmark(app).reviewed.tolist() == [12] * 5
     actual = next(item.value for item in app.tabs[4].dataframe if "amendments_found" in item.value.columns)
     assert actual.equals(default)
 
@@ -254,3 +254,18 @@ def test_linked_review_scenarios_trace_and_evaluation_isolation():
     app.radio(key="cohort").set_value("Evaluation holdout").run()
     assert not app.exception
     assert all(value.startswith("FIC-") for value in app.selectbox(key="selected_plan").options)
+
+
+def test_experiment_disagreement_and_whole_cohort_ui():
+    app = start_app()
+    assert not app.exception
+    evidence = app.tabs[3]
+    assert any("top-K overlap" in item.value for item in evidence.subheader)
+    comparisons = next(item.value for item in evidence.dataframe if "selected_by" in item.value.columns)
+    assert len(comparisons) == 44
+    assert comparisons.selected_by.value_counts().to_dict() == {"ML only at K": 22, "Rules only at K": 22}
+    assert any("100 permutations" in item.value for item in evidence.caption)
+    next(item for item in app.number_input if item.label == "Review budget K").set_value(500).run()
+    assert not app.exception
+    assert any("No top-K selection disagreements" in item.value for item in app.tabs[3].info)
+    assert benchmark(app).reviewed.eq(128).all()
